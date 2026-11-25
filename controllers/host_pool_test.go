@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -644,6 +645,37 @@ func TestRevokedPoolClaimStartsNothingNew(t *testing.T) {
 	if got.Spec.ConsumerRef == nil || got.Status.State != infrav1.StateInUse || len(got.Annotations) != len(held.Annotations) {
 		t.Fatalf("host = consumerRef %v, state %q, annotations %v; want it held and untouched",
 			got.Spec.ConsumerRef, got.Status.State, got.Annotations)
+	}
+}
+
+func TestNetworkDataWaitForMachine(t *testing.T) {
+	machine := testPoolMachine(poolTestMachine, poolTestTenantNamespace, poolTestPool)
+	for _, tt := range []struct {
+		name      string
+		namespace string
+		withheld  bool
+	}{
+		{name: "own namespace shows the Secret and the message", namespace: poolTestTenantNamespace},
+		{name: "other namespace withholds both", namespace: poolTestHostNamespace, withheld: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			host := testPoolHost(poolTestHost, tt.namespace)
+			host.Spec.NetworkDataSecretRef = "netdata-node-07"
+			conditions.Set(host, metav1.Condition{
+				Type: infrav1.NetworkDataReadyCondition, Status: metav1.ConditionFalse,
+				Reason: infrav1.NetworkDataSecretNotFoundReason, Message: "Secret netdata-node-07 not found",
+			})
+			got := networkDataWaitForMachine(machine, host)
+			if tt.withheld {
+				if got != networkDataWaitWithheld {
+					t.Fatalf("networkDataWaitForMachine = %q, want %q", got, networkDataWaitWithheld)
+				}
+				return
+			}
+			if !strings.Contains(got, "netdata-node-07") {
+				t.Fatalf("networkDataWaitForMachine = %q, want the host's message", got)
+			}
+		})
 	}
 }
 

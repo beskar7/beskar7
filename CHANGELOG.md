@@ -20,9 +20,10 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   host). The callback server checks this on every request, and the callback credentials are bound to the
   consumer's namespace (new `consumer-namespace` key in the bootstrap-token Secret) and UID; a release proves the
   claim the same way. Pool claims take only hosts whose last release ended in a wipe (`HostCleaned=True`); an
-  `Available` host with `spec.cleaning.mode: Metadata` that was never wiped is now wiped once. A pool member's
-  inspection report is dropped when its wipe starts, so `hardwareRequirements.matchAt: Claim` never matches a pool
-  member. A revoked grant releases and powers off nothing, and starts nothing new for the claim:
+  `Available` pool member with `spec.cleaning.mode: Metadata` that was never wiped is now wiped once (a host
+  outside every pool still waits for its next release). A host's inspection report is now dropped when its wipe
+  starts, so `hardwareRequirements.matchAt: Claim` never matches a host with `spec.cleaning.mode: Metadata`,
+  which includes every pool member. A revoked grant releases and powers off nothing, and starts nothing new for the claim:
   `PoolClaimValid=False (PoolGrantRevoked)` on the machine, `ClaimsValid=False` on the pool. A machine in another
   namespace gets a generic message instead of the host's error. New reason `PoolNotAvailable`; pool deletion waits
   for the claims on hosts in its `hostNamespaces`. Also: pool status (`members`, `available`, `claimed`), release of

@@ -18,7 +18,6 @@ rules:
   - get
   - list
   - patch
-  - update
   - watch
 - apiGroups:
   - infrastructure.cluster.x-k8s.io
@@ -33,7 +32,6 @@ rules:
   verbs:
   - get
   - patch
-  - update
 # Namespaces: a pool's namespaceSelector matches namespace labels.
 - apiGroups:
   - ""

@@ -120,7 +120,7 @@ namespace does nothing.
   pools do not add any yet
 - `hardwareRequirements.matchAt: Claim` never matches a pool member. The
   inspection report comes from the claim run's inspector, which the claimant
-  chooses, so a member's report is dropped when its wipe starts, and a released
+  chooses, so every host's report is dropped when its wipe starts, and a released
   member has none. Use `hostSelector` labels to steer pool claims
 - no fallback to the machine's own namespace or to other pools
 - once the machine has a `providerID` it never claims a second host: if the
@@ -137,9 +137,12 @@ host's is valid only while all of these hold:
 
 The host side alone is written by whoever writes the host namespace, so the
 machine side is what keeps a forged claim from reaching a machine's bootstrap
-data: nobody outside the tenant namespace can read the machine's UID or write
-its `providerID`. The host's callback credentials are bound to the machine's
-namespace, name and UID.
+data. Nobody outside the tenant namespace can write the machine's `providerID`.
+Its UID is not secret (it is on the claimed host's `consumerRef`, in the
+callback Secret, and visible to anyone who can read `Beskar7Machine`s
+cluster-wide), but a host-namespace writer only learns it through a claim on one
+of their own hosts, which is already valid. The host's callback credentials are
+bound to the machine's namespace, name and UID.
 
 This is checked on every request, not only at claim time, and an invalid claim
 is treated like no claim at all, so the host gets no bootstrap data. The
@@ -193,6 +196,11 @@ claimed through it. A `consumerPool` left on a host without a `consumerRef` (for
 example after a dangling `consumerRef` was cleared by hand) does not count. A
 deleting pool takes no new claims; existing claims stay valid. The pool
 reconciler honours the `cluster.x-k8s.io/paused` annotation.
+
+A claim records the pool by name, not by UID. If the finalizer is removed by hand
+and a pool is created again under the same name, every claim still on a host
+that names it is valid again, as long as the host is a member of the new pool,
+the new pool grants the machine's namespace, and the machine proves the claim.
 
 ## Who may claim: lock down namespace labels
 
@@ -248,23 +256,33 @@ What the operator does, in this order:
 3. Label the BMC credentials Secrets in the host namespace with
    `clusterctl.cluster.x-k8s.io/move=""`, or create them on the target first
    (see [PhysicalHost](physicalhost.md)).
-4. On the source, pause every `Cluster` that has a claim on any host in the host
+4. On the source, make sure every pool machine has a `providerID`: wait for the
+   ones still provisioning, or delete them. A pool machine moved without one
+   cannot prove its claim on the target, since its UID changes and pausing does
+   not keep it. It then claims a second host, and the first one stays claimed by
+   a machine that no longer exists. This lists the pool machines that have none:
+
+   ```sh
+   kubectl get beskar7machines -A -o jsonpath='{range .items[?(@.spec.poolRef)]}{.metadata.namespace}/{.metadata.name}{"\t"}{.spec.providerID}{"\n"}{end}' | awk -F'\t' '$2 == ""'
+   ```
+
+5. On the source, pause every `Cluster` that has a claim on any host in the host
    namespace (`spec.paused: true`). Otherwise the tenant clusters keep running
    there while their hosts disappear: a machine still provisioning goes back to
-   claiming, and health checks may act on the rest.
-5. `clusterctl move -n <host namespace>`. It takes every host in the namespace,
+   claiming, and health checks may act on the rest. Then run the check from
+   step 4 again. If a pool machine was added in between, unpause its `Cluster`
+   and go back to step 4.
+6. `clusterctl move -n <host namespace>`. It takes every host in the namespace,
    not only the pools' members.
-6. `clusterctl move -n <tenant namespace>` for every namespace with a claim on
+7. `clusterctl move -n <tenant namespace>` for every namespace with a claim on
    any host in the moved namespace, through a pool or not. A host can only be on
    one management cluster, so every tenant that claims from it moves with it.
-7. Check that every `Cluster` paused in step 4 runs again on the target, and
+8. Check that every `Cluster` paused in step 5 runs again on the target, and
    unpause any that does not.
 
-After step 7, every moved machine finds its host by `providerID`, and
-`PoolClaimValid` and the pools' `ClaimsValid` are `True` again. A machine that
-was moved before it had a `providerID` cannot prove its claim (its UID changed),
-which is one more reason to pause first. The source pools then have no claims
-left and can be deleted.
+After step 8, every moved machine finds its host by `providerID`, and
+`PoolClaimValid` and the pools' `ClaimsValid` are `True` again. The source pools
+then have no claims left and can be deleted.
 
 If you move only a tenant namespace and leave the hosts on the source, the
 machines on the target wait with `WaitingForPhysicalHost`. On the source, the

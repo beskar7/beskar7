@@ -570,7 +570,7 @@ func (r *Beskar7MachineReconciler) handlePhysicalHostState(ctx context.Context, 
 			// requeue is only a backstop.
 			logger.Info("PhysicalHost network data cannot be served yet; waiting before booting it", "physicalhost", physicalHost.Name)
 			setFalse(b7machine, infrav1.InfrastructureReadyCondition, infrav1.WaitingForNetworkDataReason,
-				"Waiting for PhysicalHost %q: %s", physicalHost.Name, networkDataWaitMessage(physicalHost))
+				"Waiting for PhysicalHost %q: %s", physicalHost.Name, networkDataWaitForMachine(b7machine, physicalHost))
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 		}
 		// Host claimed, need to trigger inspection

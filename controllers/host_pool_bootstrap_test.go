@@ -135,7 +135,7 @@ var _ = Describe("Bootstrap GET for a host claimed through a PhysicalHostPool", 
 
 	// forge writes what a host-namespace writer controls: a host in the pool
 	// whose claim names the tenant machine, and a bootstrap-token Secret with a
-	// token of their choosing. They cannot read the machine's UID.
+	// token of their choosing. They only learn the machine's UID from a claim on their own host.
 	forge := func(name string, claimUID types.UID) (*infrav1.PhysicalHost, string) {
 		forged := testPoolHost(name, hostNs.Name, pool.Name)
 		forged.Spec.RedfishConnection = infrav1.RedfishConnection{Address: "https://192.0.2.31", CredentialsSecretRef: "irrelevant"}

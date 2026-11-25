@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/events"
 	"k8s.io/utils/ptr"
@@ -38,6 +39,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	infrav1 "github.com/beskar7/beskar7/api/v1beta2"
+	"github.com/beskar7/beskar7/internal/auth"
 )
 
 const (
@@ -45,6 +47,7 @@ const (
 	poolSpecInterval = 100 * time.Millisecond
 	poolSpecCluster  = "pool-cluster"
 	poolSpecGrant    = "beskar7-pool-spec"
+	poolSpecForged   = "forged-uid"
 )
 
 // The pool controllers under a running manager with --enable-host-pools: the
@@ -55,6 +58,7 @@ var _ = Describe("PhysicalHostPool claims under a running manager", func() {
 		hostNs, tenantNs *corev1.Namespace
 		pool             *infrav1.PhysicalHostPool
 		mgrCancel        context.CancelFunc
+		mgrClient        client.Client
 	)
 
 	BeforeEach(func() {
@@ -86,6 +90,7 @@ var _ = Describe("PhysicalHostPool claims under a running manager", func() {
 			Controller: config.Controller{SkipNameValidation: ptr.To(true)},
 		})
 		Expect(err).NotTo(HaveOccurred())
+		mgrClient = mgr.GetClient()
 
 		bmc := (&bmcGate{reachable: true}).factory()
 		Expect((&PhysicalHostReconciler{
@@ -239,6 +244,75 @@ var _ = Describe("PhysicalHostPool claims under a running manager", func() {
 		}, poolSpecTimeout, poolSpecInterval).Should(Succeed())
 	}
 
+	// forgedPoolHost creates what a host-namespace writer controls: a pool member whose claim names
+	// machineKey with a UID they made up, and its bootstrap-token Secret. It returns once the
+	// manager's cache holds both, so a refusal is not a cache miss.
+	forgedPoolHost := func(name string, machineKey client.ObjectKey) (client.ObjectKey, string) {
+		host := testPoolHost(name, hostNs.Name, pool.Name)
+		host.Spec.RedfishConnection = infrav1.RedfishConnection{
+			Address: "https://mock-redfish.example.invalid:8443", CredentialsSecretRef: "bmc-credentials",
+		}
+		host.Status = infrav1.PhysicalHostStatus{}
+		claimedThrough(host, machineKey.Namespace, machineKey.Name, pool.Name)
+		host.Spec.ConsumerRef.UID = poolSpecForged
+		Expect(k8sClient.Create(ctx, host)).To(Succeed())
+		key := client.ObjectKeyFromObject(host)
+
+		token, _, err := auth.MintToken()
+		Expect(err).NotTo(HaveOccurred())
+		data := boundCredentialData(machineKey.Name, token, 30*time.Minute, "", 0)
+		data[bootstrapConsumerNamespaceSecretKey] = []byte(machineKey.Namespace)
+		data[bootstrapConsumerUIDSecretKey] = []byte(poolSpecForged)
+		putCredentialSecret(key, data)
+
+		secretKey := client.ObjectKey{Namespace: key.Namespace, Name: bootstrapTokenSecretName(key.Name)}
+		Eventually(func(g Gomega) {
+			g.Expect(mgrClient.Get(ctx, key, &infrav1.PhysicalHost{})).To(Succeed())
+			g.Expect(mgrClient.Get(ctx, secretKey, &corev1.Secret{})).To(Succeed())
+		}, poolSpecTimeout, poolSpecInterval).Should(Succeed())
+		return key, token
+	}
+
+	It("refuses a forged claim on the bootstrap route through the manager's cache", func() {
+		held := wipedPoolHost("pool-host-real", "")
+		machineKey := poolMachine("pool-m-forged", "")
+		claimedHost(machineKey, held)
+		forged, token := forgedPoolHost("pool-host-forged", machineKey)
+
+		mux := buildBootstrapMuxFor(mgrClient, true)
+		get := func() (int, string) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/bootstrap/"+forged.Namespace+"/"+forged.Name, nil)
+			req.Header.Set("Authorization", "Bearer "+token)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+			return w.Code, w.Body.String()
+		}
+		Consistently(func() int { code, _ := get(); return code }, "2s", poolSpecInterval).
+			Should(Equal(http.StatusUnauthorized))
+		_, body := get()
+		Expect(body).NotTo(ContainSubstring("#cloud-config"))
+		Expect(getPhysicalHost(held).Spec.ConsumerRef.Name).To(Equal(machineKey.Name), "the real claim is untouched")
+	})
+
+	It("releases the machine's own host, not a forged claim, when the machine is deleted", func() {
+		held := wipedPoolHost("pool-host-release", "")
+		machineKey := poolMachine("pool-m-release", "")
+		claimedHost(machineKey, held)
+		// Sorts before the real host, so a lookup without the proof would find it first.
+		forged, _ := forgedPoolHost("a-pool-host-forged", machineKey)
+
+		Expect(k8sClient.Delete(ctx, getMachine(machineKey))).To(Succeed())
+		Eventually(func(g Gomega) {
+			err := k8sClient.Get(ctx, machineKey, &infrav1.Beskar7Machine{})
+			g.Expect(apierrors.IsNotFound(err)).To(BeTrue())
+		}, poolSpecTimeout, poolSpecInterval).Should(Succeed())
+
+		Expect(getPhysicalHost(held).Spec.ConsumerRef).To(BeNil(), "the machine's own host is released")
+		got := getPhysicalHost(forged)
+		Expect(got.Spec.ConsumerRef).NotTo(BeNil(), "the forged claim is left alone")
+		Expect(got.Spec.ConsumerRef.UID).To(BeEquivalentTo(poolSpecForged))
+	})
+
 	It("revokes and restores a claim through the Namespace and pool watches", func() {
 		hostKey := wipedPoolHost("pool-host", "")
 		machineKey := poolMachine("pool-m1", "")
@@ -294,8 +368,9 @@ var _ = Describe("PhysicalHostPool claims under a running manager", func() {
 
 	It("takes no new claim through a pool being deleted", func() {
 		held := wipedPoolHost("pool-host-held", "")
-		spare := wipedPoolHost("pool-host-spare", "")
 		claimedHost(poolMachine("pool-m-first", ""), held)
+		// Created after the first claim, so that claim cannot land on it.
+		spare := wipedPoolHost("pool-host-spare", "")
 
 		Expect(k8sClient.Delete(ctx, getPool())).To(Succeed())
 		Eventually(func(g Gomega) {

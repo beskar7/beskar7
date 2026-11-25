@@ -326,10 +326,10 @@ func provesPoolClaim(host *infrav1.PhysicalHost, b7machine *infrav1.Beskar7Machi
 }
 
 // adoptsPoolClaim reports whether a pool claim naming b7machine is its own. The
-// claim carries the machine's UID, which nobody outside its namespace can read,
-// or, after clusterctl move recreated the machine with a new UID, the machine's
-// providerID names the host: the host admin writes the claim and the tenant the
-// providerID, so neither can point a host at a machine alone.
+// claim carries the machine's UID, which a host-namespace writer only learns from
+// a claim on their own host, or, after clusterctl move recreated the machine with a
+// new UID, the machine's providerID names the host: the host admin writes the claim
+// and the tenant the providerID, so neither can point a host at a machine alone.
 func adoptsPoolClaim(host *infrav1.PhysicalHost, b7machine *infrav1.Beskar7Machine) bool {
 	if uid := host.Spec.ConsumerRef.UID; uid != "" && uid == b7machine.UID {
 		return true

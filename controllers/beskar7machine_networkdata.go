@@ -52,3 +52,15 @@ func networkDataWaitMessage(physicalHost *infrav1.PhysicalHost) string {
 	}
 	return cond.Reason + ": " + cond.Message
 }
+
+// networkDataWaitWithheld stands in for the network-data wait on a machine in another namespace.
+const networkDataWaitWithheld = "its network data is not ready yet; its details are on the PhysicalHost, ask the host admin"
+
+// networkDataWaitForMachine is the network-data wait b7machine may show. A host in
+// another namespace keeps its Secret name and validation message to itself.
+func networkDataWaitForMachine(b7machine *infrav1.Beskar7Machine, physicalHost *infrav1.PhysicalHost) string {
+	if physicalHost.Namespace != b7machine.Namespace {
+		return networkDataWaitWithheld
+	}
+	return networkDataWaitMessage(physicalHost)
+}

@@ -399,9 +399,9 @@ var _ = Describe("Cleaning a released PhysicalHost (spec.cleaning.mode Metadata)
 		Expect(bmc.SetBootSourcePXECalled).To(BeTrue())
 	})
 
-	// The claim run's inspector was the claimant's choice, so a pool member's
-	// report must not steer the next namespace's claim (matchAt: Claim).
-	It("drops a pool member's inspection report at the wipe and keeps another host's", func() {
+	// The claim run's inspector was the claimant's choice, so its report must not
+	// steer the next claim (matchAt: Claim), whatever the host's labels are now.
+	It("drops the inspection report at every wipe, in a pool or not", func() {
 		withReport := func(key client.ObjectKey, pool string) {
 			current := getPhysicalHost(key)
 			labelled := current.DeepCopy()
@@ -424,28 +424,50 @@ var _ = Describe("Cleaning a released PhysicalHost (spec.cleaning.mode Metadata)
 		reconcile(r, own)
 
 		Expect(getPhysicalHost(member).Status.InspectionReport).To(BeNil())
-		Expect(getPhysicalHost(own).Status.InspectionReport).NotTo(BeNil())
+		Expect(getPhysicalHost(own).Status.InspectionReport).To(BeNil())
 	})
 
-	// A pool claims only a host with HostCleaned=True, so an Available host that
-	// was never wiped is wiped once instead of staying out of every pool.
-	It("wipes an Available host once when spec.cleaning.mode becomes Metadata", func() {
-		r := newReconciler()
-		key := releasedHost("clean-later", infrav1.CleaningModeDisabled)
+	// availableWithMetadata makes an Available host that was never wiped, then sets spec.cleaning.mode Metadata
+	// and, for a non-empty pool, the pool's label.
+	availableWithMetadata := func(r *PhysicalHostReconciler, name, pool string) client.ObjectKey {
+		key := releasedHost(name, infrav1.CleaningModeDisabled)
 		reconcile(r, key)
 		Expect(getPhysicalHost(key).Status.State).To(Equal(infrav1.StateAvailable))
 		bmc.SetBootSourcePXECalled = false
 
 		current := getPhysicalHost(key)
-		withMode := current.DeepCopy()
-		withMode.Spec.Cleaning = &infrav1.CleaningSpec{Mode: infrav1.CleaningModeMetadata}
-		Expect(k8sClient.Patch(ctx, withMode, client.MergeFrom(current))).To(Succeed())
+		changed := current.DeepCopy()
+		changed.Spec.Cleaning = &infrav1.CleaningSpec{Mode: infrav1.CleaningModeMetadata}
+		if pool != "" {
+			changed.Labels = map[string]string{poolLabelKey(pool): ""}
+		}
+		Expect(k8sClient.Patch(ctx, changed, client.MergeFrom(current))).To(Succeed())
+		return key
+	}
+
+	// A pool claims only a host with HostCleaned=True, so an Available member that
+	// was never wiped is wiped once instead of staying out of every pool.
+	It("wipes an Available pool member once when spec.cleaning.mode becomes Metadata", func() {
+		r := newReconciler()
+		key := availableWithMetadata(r, "clean-later", "shared")
 		reconcile(r, key)
 
 		host := getPhysicalHost(key)
 		Expect(host.Status.State).To(Equal(infrav1.StateCleaning))
 		Expect(conditions.GetReason(host, infrav1.HostAvailableCondition)).To(Equal(infrav1.HostCleaningReason))
 		Expect(bmc.SetBootSourcePXECalled).To(BeTrue())
+	})
+
+	// Outside a pool, Metadata set on an Available host waits for its next release,
+	// as in v0.12.0, so an upgrade wipes nothing at once.
+	It("leaves an Available host outside every pool alone when spec.cleaning.mode becomes Metadata", func() {
+		r := newReconciler()
+		key := availableWithMetadata(r, "clean-later-own", "")
+		reconcile(r, key)
+
+		host := getPhysicalHost(key)
+		Expect(host.Status.State).To(Equal(infrav1.StateAvailable))
+		Expect(bmc.SetBootSourcePXECalled).To(BeFalse())
 	})
 
 	It("leaves an Available host alone once it has been wiped", func() {
