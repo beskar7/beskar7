@@ -250,12 +250,15 @@ type Beskar7MachineSpec struct {
 	// +kubebuilder:validation:Pattern="^https://[^\\s]+$"
 	TargetImageDigestURL string `json:"targetImageDigestURL,omitempty"`
 
-	// TargetDisk optionally pins the disk the inspector writes the OS image to.
-	// A stable device path (/dev/disk/by-id/..., /dev/disk/by-path/...) or a
-	// kernel name (/dev/nvme0n1, sda). When set, the inspector uses exactly that
-	// device and aborts (never falling back) if it is ineligible; when empty, the
-	// inspector auto-selects the smallest eligible disk (contract §5 beskar7.disk,
-	// §9.1 step 2). Non-secret.
+	// TargetDisk optionally pins the disk the inspector writes the OS image to,
+	// by kernel name (/dev/nvme0n1, sda). A /dev/disk/by-id or /dev/disk/by-path
+	// path does not work: the inspector has no udev, so those links don't exist
+	// there and the provisioning run fails. A kernel name follows the order the
+	// disks are probed in, so on a host with several disks of one kind it can
+	// name a different disk on a later boot. When set, the inspector uses exactly
+	// that device and aborts (never falling back) if it is ineligible; when empty,
+	// the inspector auto-selects the smallest eligible disk (contract §5
+	// beskar7.disk, §9.1 step 2). Non-secret.
 	// +kubebuilder:validation:Pattern="^[A-Za-z0-9._:/+-]+$"
 	// +optional
 	TargetDisk string `json:"targetDisk,omitempty"`

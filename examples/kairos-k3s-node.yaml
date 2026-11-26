@@ -217,8 +217,10 @@ spec:
 #   Read the trust trade-off first: examples/target-image-digest-url.yaml.
 #
 # Optional fields:
-#   targetDisk: pin the install disk (e.g. /dev/disk/by-id/nvme-...).
-#               Omit to let the inspector auto-select the smallest eligible disk.
+#   targetDisk: pin the install disk by kernel name (e.g. /dev/nvme0n1).
+#               A /dev/disk/by-id path does not work: the inspector has no udev
+#               (#350). Omit to let the inspector auto-select the smallest
+#               eligible disk.
 #   staticIP:   static-network override for DHCP-less provisioning networks.
 #               Format: <ip>::[<gw>]:<mask>[:<dns>]  (see docs/inspector-contract.md §5)
 #   hardwareRequirements: gate provisioning on minimum CPU/memory/disk.
@@ -233,7 +235,7 @@ spec:
   inspectionImageURL: "https://<boot-server>/inspector"
   targetImageURL: "http://<image-server>/kairos-k3s-<version>.raw"
   targetImageDigest: "sha256:<sha256-of-the-image>"
-  # targetDisk: "/dev/disk/by-id/wwn-..."
+  # targetDisk: "/dev/nvme0n1"
   hardwareRequirements:
     minCPUCores: 2
     minMemoryGB: 4
