@@ -59,5 +59,9 @@
     }
   ],
   "bootModeDetected": "UEFI",
-  "firmwareVersion": "2.10.2"
+  "firmwareVersion": "2.10.2",
+  "contractVersion": "v4.5",
+  "systemUUID": "4c4c4544-0042-3510-8051-b4c04f565431",
+  "bootMACAddress": "aa:bb:cc:dd:ee:01",
+  "targetDisk": "/dev/nvme0n1"
 }

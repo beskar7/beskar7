@@ -1,4 +1,4 @@
-# Inspector contract fixtures (contract: v4.4)
+# Inspector contract fixtures (contract: v4.5)
 
 This directory holds the **canonical golden fixtures** for the controller ↔
 inspector wire contract — the inbound inspection-report body and the outbound
@@ -13,7 +13,9 @@ these fixtures are the machine-checked half of it.
 The exact JSON body a `beskar7-inspector` run POSTs to
 `POST {callbackBase}/api/v1/inspection/{namespace}/{hostName}`
 (`namespace`/`hostName` are path parameters, not body fields, so they do **not**
-appear here). It models one representative dual-socket host.
+appear here). It models one representative dual-socket host. Since v4.5 it
+also carries the optional `contractVersion`, `systemUUID`, `bootMACAddress` and
+`targetDisk` fields (§6), each satisfying its §6.1 rule.
 
 Both repos assert against the **same bytes**:
 
@@ -60,6 +62,20 @@ the kernel cmdline param order and values, including `beskar7.provider-id=b7://{
 `buildBootIPXEScript`/`providerID()` and asserts byte-equality; the inspector's
 cmdline parser must accept every param present here.
 
+## `golden_inspect_boot_cmdline.txt` (contract v4.5, inspect mode)
+
+The byte-exact `/boot` script for an inspect boot (`beskar7.mode=inspect`): the
+inputs of `golden_boot_cmdline.txt` without a claim's parameters
+(`beskar7.target`, `beskar7.target-digest`, `beskar7.provider-id`,
+`beskar7.disk`, `beskar7.ip`), with `beskar7.mode=inspect` right after
+`beskar7.token`. That is the shape of a cleaning boot
+(`buildCleaningIPXEScript`) with the other mode. The inspector's cmdline parser
+must accept it in inspect mode. The controller does not render inspect boots
+yet (#289), so `TestGoldenInspectBootCmdline_MatchesProvisioningRender`
+(`inspect_boot_cmdline_test.go`) derives it from the provisioning fixture and
+asserts the bytes match; once the render exists, a byte-equality test against
+it replaces that derivation. There is no fixture for the v4.4 clean boot.
+
 ## `golden_provider_id_artifact.json` (contract v4.2, deploy-path)
 
 The descriptor for the `COS_OEM` artifact the inspector writes for P2: path
@@ -86,7 +102,7 @@ on `401`, and fails the deploy on `409`.
 ## `VERSION`
 
 A one-line plain-text marker: the contract version this checkout implements
-(currently `v4.4`). It is the root of truth for the version: beskar7 pins a
+(currently `v4.5`). It is the root of truth for the version: beskar7 pins a
 Go const to it (`contract.Version`, `version.go` in this directory), and
 `beskar7-inspector` pins its own Rust `CONTRACT_VERSION` to a vendored copy of
 the same bytes. `TestContractVersion` (`version_test.go`) is the intra-repo

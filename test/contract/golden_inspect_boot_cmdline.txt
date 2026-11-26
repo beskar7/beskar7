@@ -1,0 +1,4 @@
+#!ipxe
+kernel http://images.example.invalid/vmlinuz beskar7.api=https://beskar7.example.invalid:8082 beskar7.namespace=contract-test beskar7.host=host-01 beskar7.token=test-token-0123456789abcdef beskar7.mode=inspect beskar7.ca=dGVzdC1jYS1wZW0tcGxhY2Vob2xkZXI= BOOTIF=01-52-54-00-12-34-56
+initrd http://images.example.invalid/initrd.img
+boot

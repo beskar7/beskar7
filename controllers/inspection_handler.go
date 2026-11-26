@@ -112,6 +112,13 @@ type InspectionReportRequest struct {
 	// Additional metadata
 	BootModeDetected string `json:"bootModeDetected,omitempty"`
 	FirmwareVersion  string `json:"firmwareVersion,omitempty"`
+
+	// Optional since contract v4.5 (§6). Decoded and not yet recorded on the
+	// PhysicalHost: that comes with the onboarding API (#287).
+	ContractVersion string `json:"contractVersion,omitempty"`
+	SystemUUID      string `json:"systemUUID,omitempty"`
+	BootMACAddress  string `json:"bootMACAddress,omitempty"`
+	TargetDisk      string `json:"targetDisk,omitempty"`
 }
 
 type CPUData struct {
