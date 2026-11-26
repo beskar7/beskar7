@@ -11,6 +11,10 @@ different expectations, described below.
   go straight to a PR; an API change, a new CRD field, or anything touching the
   wire contract should be discussed first — some of these carry constraints that
   are not obvious from the code (see *Things that look simple but are not*).
+- **Open all issues in [beskar7/beskar7](https://github.com/beskar7/beskar7/issues).**
+  This includes issues about the inspector
+  ([`beskar7-inspector`](https://github.com/beskar7/beskar7-inspector)), so that
+  everything is tracked in one place. PRs still go to the repo that holds the code.
 - **Security issues do not belong in public issues.** See [SECURITY.md](SECURITY.md).
 
 ## Development setup
