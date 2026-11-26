@@ -312,8 +312,10 @@ type Beskar7MachineSpec struct {
 	// machine's own namespace. Only members of that pool are considered, with no
 	// fallback; HostSelector and the failure domain still apply. The pool must
 	// grant the machine's namespace, otherwise the machine waits with
-	// PoolNotAvailable. Immutable on a Beskar7Machine; a template may change it,
-	// which rolls the machines created from it.
+	// PoolNotAvailable. Immutable on a Beskar7Machine. A template may change it:
+	// Cluster API rolls the machines only when the template is rotated, as
+	// ClusterClass does, and an in-place edit reaches only machines created after
+	// it.
 	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
 	// +optional
