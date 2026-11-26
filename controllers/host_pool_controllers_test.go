@@ -298,7 +298,7 @@ var _ = Describe("PhysicalHostPool claims under a running manager", func() {
 		held := wipedPoolHost("pool-host-release", "")
 		machineKey := poolMachine("pool-m-release", "")
 		claimedHost(machineKey, held)
-		// Sorts before the real host, so a lookup without the proof would find it first.
+		// The index lookup isn't sorted, so without the proof it may be found first.
 		forged, _ := forgedPoolHost("a-pool-host-forged", machineKey)
 
 		Expect(k8sClient.Delete(ctx, getMachine(machineKey))).To(Succeed())

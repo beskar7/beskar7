@@ -1072,7 +1072,7 @@ func (r *PhysicalHostReconciler) applyInspectionResultAnnotation(ctx context.Con
 	}
 
 	// Persist to Status. This is the SOLE place Status.InspectionReport is
-	// set by the controller (D-005); enterCleaning only clears a pool member's.
+	// set by the controller (D-005); enterCleaning clears it at every wipe.
 	physicalHost.Status.InspectionReport = report
 	physicalHost.Status.InspectionPhase = infrav1.InspectionPhaseComplete
 	setTrue(physicalHost, infrav1.HostInspectedCondition, infrav1.HostInspectedReason)

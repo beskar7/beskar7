@@ -89,9 +89,10 @@ func hostStateHeld(host *infrav1.PhysicalHost) bool {
 }
 
 // releasedForCleaning reports whether an unclaimed host must be wiped first: it carries a claim's state or
-// HostClaimed marker, it has no state at all (new, or moved by clusterctl, which drops status), or it is a
-// pool member that is Available without a wipe behind it, since a pool claims only HostCleaned=True hosts.
-func releasedForCleaning(host *infrav1.PhysicalHost) bool {
+// HostClaimed marker, it has no state at all (new, or moved by clusterctl, which drops status), or, with host
+// pools on, it is a pool member that is Available without a wipe behind it, since a pool claims only
+// HostCleaned=True hosts.
+func releasedForCleaning(host *infrav1.PhysicalHost, poolsEnabled bool) bool {
 	if host.Spec.ConsumerRef != nil || !cleaningEnabled(host) {
 		return false
 	}
@@ -99,7 +100,9 @@ func releasedForCleaning(host *infrav1.PhysicalHost) bool {
 	case infrav1.StateNone, infrav1.StateInUse, infrav1.StateInspecting, infrav1.StateDeploying, infrav1.StateReady:
 		return true
 	case infrav1.StateAvailable:
-		return len(hostPools(host)) > 0 && !conditions.IsTrue(host, infrav1.HostCleanedCondition)
+		if poolsEnabled && len(hostPools(host)) > 0 && !conditions.IsTrue(host, infrav1.HostCleanedCondition) {
+			return true
+		}
 	}
 	c := conditions.Get(host, infrav1.HostAvailableCondition)
 	return c != nil && c.Status == metav1.ConditionFalse && c.Reason == infrav1.HostClaimedReason
@@ -119,7 +122,7 @@ func enterCleaning(host *infrav1.PhysicalHost) {
 
 // startCleaningOnRelease moves a released host to Cleaning before the BMC is tried, so an outage cannot skip it.
 func (r *PhysicalHostReconciler) startCleaningOnRelease(logger logr.Logger, host *infrav1.PhysicalHost) {
-	if !releasedForCleaning(host) {
+	if !releasedForCleaning(host, r.HostPools) {
 		return
 	}
 	logger.Info("Unclaimed host with spec.cleaning.mode Metadata; wiping its disks before it is Available",

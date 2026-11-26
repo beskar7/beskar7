@@ -62,10 +62,10 @@ const (
 	// names that same machine. The binding is by name, not UID, because
 	// clusterctl move recreates the Beskar7Machine with a new UID.
 	bootstrapConsumerSecretKey = "consumer"
-	// bootstrapConsumerUIDSecretKey is the UID of that machine. Verification
-	// never reads it; the mint does, so that a Beskar7Machine recreated under
-	// the same name is a new claim and gets fresh credentials (contract §12)
-	// instead of inheriting the earlier machine's.
+	// bootstrapConsumerUIDSecretKey is the UID of that machine. The mint reads
+	// it, so that a Beskar7Machine recreated under the same name is a new claim
+	// and gets fresh credentials (contract §12) instead of inheriting the
+	// earlier machine's; verification reads it for a pool claim.
 	bootstrapConsumerUIDSecretKey = "consumer-uid"
 	// bootstrapConsumerNamespaceSecretKey is that machine's namespace; absent means the host's own (before pools).
 	bootstrapConsumerNamespaceSecretKey = "consumer-namespace"
