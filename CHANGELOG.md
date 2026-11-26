@@ -13,8 +13,9 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   `config/host-pools`; rejected with `--controllers=none`). Hosts join a pool with the label
   `pool.beskar7.infrastructure.cluster.x-k8s.io/<pool>` and stay, with their BMC Secrets, in an admin namespace. The
   pool lists the namespaces it takes members from (`hostNamespaces`) and the namespaces that may claim
-  (`namespaceSelector`, required). A `Beskar7Machine` opts in with the new immutable `spec.poolRef`, and the
-  controller records the pool on the host in the new `spec.consumerPool`, in the same update as `consumerRef`. A
+  (`namespaceSelector`, required). A `Beskar7Machine` opts in with the new `spec.poolRef`, immutable on the machine
+  (a `Beskar7MachineTemplate` may change it, which rolls its machines), and the controller records the pool on the
+  host in the new `spec.consumerPool`, in the same update as `consumerRef`. A
   `consumerRef` in another namespace (SEC-12) is valid only while that pool still holds the host and grants the
   consumer's namespace, and the machine proves the claim (its `poolRef`, and its UID or a `providerID` naming the
   host). The callback server checks this on every request, and the callback credentials are bound to the

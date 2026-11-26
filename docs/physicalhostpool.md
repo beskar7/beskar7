@@ -74,7 +74,7 @@ create `PhysicalHost`s and Secrets there controls the host side of every claim.
 |---|---|---|
 | Pool: `hostNamespaces`, `namespaceSelector` | `PhysicalHostPool` (cluster-scoped) | admin |
 | Host is in pool `<name>` | label `pool.beskar7.infrastructure.cluster.x-k8s.io/<name>` on the `PhysicalHost`, any value | admin |
-| Machine wants pool `<name>` | `Beskar7Machine.spec.poolRef` (cannot be added, changed or removed) | cluster owner, usually through the template |
+| Machine wants pool `<name>` | `Beskar7Machine.spec.poolRef` (cannot be added, changed or removed; a `Beskar7MachineTemplate` may change it, which rolls its machines) | cluster owner, usually through the template |
 | The pool a claim went through | `PhysicalHost.spec.consumerPool` | controller, in the same update as `consumerRef` |
 
 A host can carry several pool labels. A machine names one pool.
