@@ -1,6 +1,6 @@
 # Beskar7 Controller ↔ Inspector Contract
 
-**Contract version: `v4.4`, FROZEN for v0.4.0 GA**
+**Contract version: `v4.5`, FROZEN for v0.4.0 GA**
 
 > The wire contract is **frozen** as of `v0.4.0`. Within the `v4.x` line, changes
 > MUST be additive and backward-compatible, as specified in
@@ -16,6 +16,19 @@ ramdisk (`beskar7-inspector`). Both repositories pin to a contract version; a
 change to the wire format, auth, endpoints, or cmdline parameters is a contract
 version bump and requires updating this document and the golden fixture
 (see [Versioning and anti-drift](#10-versioning-and-anti-drift)).
+
+> **v4.5 in one line:** adds inspect mode, for onboarding a host before any
+> claim (#284, #286): a boot with `beskar7.mode=inspect` (§5) carries none of
+> a claim's parameters, and the inspector brings up the network, posts the §6
+> report to `/inspection` and powers off, never fetching bootstrap data and
+> never touching a disk (§9.4). The §6 report gains four optional fields on
+> every run: `contractVersion`, `systemUUID`, `bootMACAddress` and
+> `targetDisk`. Additive and backward-compatible: the controller tolerates
+> their absence, and an older inspector never reports in inspect mode (a v4.3
+> one fails on the missing `beskar7.target`, a v4.4 one refuses the unknown
+> mode), so the controller's onboarding timeout ends the run. **No endpoint
+> added.** The controller does not render an inspect boot yet: that, and the
+> run that consumes the report, come with the onboarding work (#287 to #289).
 
 > **v4.4 in one line:** adds an opt-in clean mode for released hosts
 > (`PhysicalHost.spec.cleaning.mode: Metadata`, #306): `/boot` renders
@@ -258,6 +271,16 @@ HTTPS listener (default `:8082`, `controllers/inspection_handler.go`
   static IP or provider ID is rendered. The cleaning run's nonce lives as
   long as `--cleaning-timeout`, not the 10 minutes of a claim's.
 
+- **Inspect boot** (v4.5, **not rendered by the controller yet**): the `/boot`
+  render of an onboarding run for an unclaimed host. The onboarding work
+  (#287 to #289) decides the host state, the run's credentials and the image;
+  the contract fixes only the script. It boots the inspector with only
+  `beskar7.api`, `beskar7.namespace`, `beskar7.host`, `beskar7.token`,
+  `beskar7.mode=inspect`, `beskar7.ca` and the optional `BOOTIF`, in that order
+  (`test/contract/golden_inspect_boot_cmdline.txt`), the same shape as a
+  cleaning boot. No target image, digest, disk, static IP or provider ID is
+  rendered.
+
 **Rendered output** (`Content-Type: text/plain`): a complete iPXE script that
 boots the inspector image with the §5 parameters on the kernel cmdline:
 
@@ -332,6 +355,12 @@ gatewayed winner on a multi-NIC host (§8.2).
   machine the Secret is bound to (§3; `auth.RequireBearer` +
   `newBearerTokenVerifier`). Any failure is the same opaque `401`, including a
   host nobody claims.
+- **Inspect mode** (v4.5): the host of an onboarding run is unclaimed, so this
+  rule cannot hold for it as written. The inspector presents `beskar7.token`
+  exactly as in a provisioning run; which credential the controller accepts for
+  an unclaimed host, and that it accepts it on this route and no other, is
+  defined with the onboarding run (#288, #289). Until then the controller
+  answers such a report with the opaque `401` above.
 - **Body**: JSON, the `InspectionReportRequest` schema in §6. Max 1 MiB
   (`inspectionMaxBodyBytes`); over-limit → `413`.
 - **Success**: **`202 Accepted`** with body `{"status":"accepted"}`. The 202 (not
@@ -590,12 +619,12 @@ these from `/proc/cmdline`.
 | `beskar7.namespace` | yes | PhysicalHost namespace (used in the endpoint paths). |
 | `beskar7.host` | yes | PhysicalHost name. |
 | `beskar7.token` | yes | The per-host bearer token (43-char `base64url`, no padding). Secret. |
-| `beskar7.target` | yes | `Beskar7Machine.Spec.TargetImageURL` — the **Kairos whole-disk raw image** the inspector writes to the target disk. MUST be an `http://` or `https://` URL; plain HTTP is permitted (integrity comes from `beskar7.target-digest`, not TLS — see §8.1). Non-secret. |
-| `beskar7.target-digest` | yes | `Beskar7Machine.Spec.TargetImageDigest` (or, when the machine sets `Spec.TargetImageDigestURL`, the `Status.TargetImageDigest` the controller pinned from it, D-038; the inspector cannot tell) — the expected SHA-256 of the bytes at `beskar7.target`, matching `^sha256:[0-9a-f]{64}$`. The inspector MUST verify the written image against this digest and MUST refuse to **boot** (mount/inject/reboot) a non-matching image (§8.1). Non-secret; it is the sole integrity **and authenticity** anchor for the OS image. |
-| `beskar7.provider-id` | yes (v4.2) | `b7://{PhysicalHost.Namespace}/{PhysicalHost.Name}` — the exact string `providerID(ph.Namespace, ph.Name)` computes, which is also the value stamped onto `Beskar7Machine.Spec.ProviderID` once the host is ready. **Always rendered** (the controller always knows the host's identity); there is no omitted form, unlike the bracketed optional params below. The inspector MUST write it verbatim (no trailing newline, mode `0600`, root-owned) to `/oem/beskar7/provider-id` on the `COS_OEM` partition during the same mount session as `99_beskar7.yaml` (§9.1 step 5.4). This is the P2 mechanism that lets a *shared* bootstrap template produce a *per-host* kubelet `--provider-id`, so the workload Node's `ProviderID` matches its Machine's without a hand-authored-per-host config — required for templated `MachineDeployment` pools and multi-replica control planes (see D-014/D-017, `docs/beskar7machine.md`). Anchored server-side by `validateProviderID` (`^b7://[a-z0-9.-]+/[a-z0-9.-]+$`, SEC-7 defence-in-depth — the value is controller-computed from already-validated k8s object names, so this guard cannot fail in production). Non-secret. |
+| `beskar7.target` | yes, except with `beskar7.mode` | `Beskar7Machine.Spec.TargetImageURL` — the **Kairos whole-disk raw image** the inspector writes to the target disk. MUST be an `http://` or `https://` URL; plain HTTP is permitted (integrity comes from `beskar7.target-digest`, not TLS — see §8.1). Non-secret. |
+| `beskar7.target-digest` | yes, except with `beskar7.mode` | `Beskar7Machine.Spec.TargetImageDigest` (or, when the machine sets `Spec.TargetImageDigestURL`, the `Status.TargetImageDigest` the controller pinned from it, D-038; the inspector cannot tell) — the expected SHA-256 of the bytes at `beskar7.target`, matching `^sha256:[0-9a-f]{64}$`. The inspector MUST verify the written image against this digest and MUST refuse to **boot** (mount/inject/reboot) a non-matching image (§8.1). Non-secret; it is the sole integrity **and authenticity** anchor for the OS image. |
+| `beskar7.provider-id` | yes (v4.2), except with `beskar7.mode` | `b7://{PhysicalHost.Namespace}/{PhysicalHost.Name}` — the exact string `providerID(ph.Namespace, ph.Name)` computes, which is also the value stamped onto `Beskar7Machine.Spec.ProviderID` once the host is ready. **Always rendered** (the controller always knows the host's identity); there is no omitted form, unlike the bracketed optional params below. The inspector MUST write it verbatim (no trailing newline, mode `0600`, root-owned) to `/oem/beskar7/provider-id` on the `COS_OEM` partition during the same mount session as `99_beskar7.yaml` (§9.1 step 5.4). This is the P2 mechanism that lets a *shared* bootstrap template produce a *per-host* kubelet `--provider-id`, so the workload Node's `ProviderID` matches its Machine's without a hand-authored-per-host config — required for templated `MachineDeployment` pools and multi-replica control planes (see D-014/D-017, `docs/beskar7machine.md`). Anchored server-side by `validateProviderID` (`^b7://[a-z0-9.-]+/[a-z0-9.-]+$`, SEC-7 defence-in-depth — the value is controller-computed from already-validated k8s object names, so this guard cannot fail in production). Non-secret. |
 | `beskar7.ca` | yes | Base64-encoded PEM of the CA the inspector uses to verify the callback's TLS cert. **Inline only.** `/boot` sources it from the manager's callback cert dir (`ca.crt` if present — cert-manager and the chart's self-signed path both provide it — else the self-signed `tls.crt`). Bounded by kernel cmdline length (~2–4 KiB): a single self-signed/issuer cert fits; a full multi-cert chain may not. A `beskar7.ca-url` fetch variant for chain delivery is deferred to a later contract version. See §8. Note: this CA verifies **only** the callback endpoints (`/inspection`, `/bootstrap`); it does NOT verify `beskar7.target` (§8.1). |
 | `beskar7.disk` | no | Operator override pinning the target disk — a stable device path (`/dev/disk/by-id/...`, `/dev/disk/by-path/...`) or a kernel name (`/dev/nvme0n1`, `sda`). When **absent**, the inspector auto-selects the smallest eligible disk (§9.1 step 2). When **present**, the inspector MUST resolve it once to its canonical whole-disk kernel device (`/dev/<kname>`, following any `by-id`/`by-path` symlink) and thereafter use *that resolved node* for both validation and the write, so the device validated is the device written (no TOCTOU re-lookup). It MUST use exactly that device and MUST abort — never silently falling back to auto-selection (a wrong pin fails loudly) — if the device is missing, not a block device, **not a whole disk** (a partition, `dm`/loop, or other non-whole-disk node), removable, read-only, **backs the running ramdisk**, or is smaller than the image. The image's size is known only once it streams, so that last check is the §8.1 size bound: the write is capped at the pinned disk's capacity, and an image that does not fit aborts as a size-limit breach. Sourced from the optional `Beskar7Machine.Spec.TargetDisk` field, rendered by `/boot` after `beskar7.ca` when set. Non-secret. |
-| `beskar7.mode` | no (v4.4) | `clean` on a cleaning boot (§4.1, §9.3). **Absent** means a provisioning run, as before v4.4. A cleaning boot carries none of `beskar7.target`, `beskar7.target-digest`, `beskar7.provider-id`, `beskar7.disk` or `beskar7.ip`; an inspector that sees `beskar7.mode=clean` MUST NOT act on them if present. Any other value MUST be refused. Non-secret. |
+| `beskar7.mode` | no (v4.4) | `clean` on a cleaning boot (§4.1, §9.3), or `inspect` on an onboarding boot (v4.5; §4.1, §9.4). **Absent** means a provisioning run, as before v4.4. A cleaning or inspect boot carries none of `beskar7.target`, `beskar7.target-digest`, `beskar7.provider-id`, `beskar7.disk` or `beskar7.ip`, so the inspector MUST NOT require them in either mode, and MUST NOT act on them if present. Any other value MUST be refused: the inspector fails closed, calling no endpoint and touching no disk. A v4.4 inspector therefore refuses `inspect`. Non-secret. |
 | `beskar7.timeout` | no | Inspector-side overall timeout (seconds). |
 | `beskar7.debug` | no | `true` to enable verbose logging / debug shell on failure. |
 | `BOOTIF` | no | The provisioning NIC's MAC in the pxelinux/iPXE form `01-aa-bb-cc-dd-ee-ff` (a `01` hardware-type prefix + the MAC with dashes). **Not** a `beskar7.*` key — it is the established netboot convention. `/boot` renders it from a `?mac=<mac>` query the operator's first-stage iPXE appends (e.g. `${net0/mac}`); see §4.1, §8.2. The inspector DHCP-configures the matching interface. **Absent** → a single-NIC host uses its one NIC; a multi-NIC host DHCP-races all links and applies the gatewayed winner (§8.2). `BOOTIF` is the deterministic pin and is the way to select a specific network. Non-secret. |
@@ -637,9 +666,46 @@ All fields are `omitempty`. Unknown fields are ignored.
   "nics": [
     { "name": "string", "macAddress": "string", "driver": "string",
       "speed": "string", "ipAddresses": ["string"] }
-  ]
+  ],
+  "contractVersion": "v4.5",   // v4.5, optional
+  "systemUUID": "string",      // v4.5, optional
+  "bootMACAddress": "string",  // v4.5, optional
+  "targetDisk": "string"       // v4.5, optional
 }
 ```
+**Optional fields (v4.5).** The inspector SHOULD send these on every report, in
+a provisioning run and in inspect mode, and omits any it cannot determine:
+
+- `contractVersion`: the contract version the inspector implements, its
+  `CONTRACT_VERSION` (for example `v4.5`).
+- `systemUUID`: the SMBIOS Type 1 (System Information) UUID, in the form Linux
+  exposes as `/sys/class/dmi/id/product_uuid`: 36 characters, lower-case hex,
+  `8-4-4-4-12`, with the first three fields decoded little-endian as SMBIOS
+  2.6 and later specify. Omitted when the firmware reports all zeros (not
+  present) or all `FF` bytes (not set).
+- `bootMACAddress`: the MAC of the provisioning NIC the inspector brought up
+  (§8.2), in the `nics[].macAddress` form: the `BOOTIF` NIC when `BOOTIF` is
+  rendered, otherwise the single NIC, or on a multi-NIC host the interface that
+  won the DHCP race. Without `BOOTIF` on a multi-NIC host it is therefore the
+  NIC that reached the callback server, which need not be the one the firmware
+  PXE-booted from. Omitted in `--dry-run`, which brings up no network.
+- `targetDisk`: the disk the §9.1 step 2 selection picks, given as that disk's
+  `disks[].name`. When `beskar7.disk` is rendered (a provisioning run whose
+  machine pins a disk), it is the pin as resolved; when it is not (every
+  inspect-mode run, and a provisioning run without a pin), it is the
+  auto-selected smallest eligible disk, the one a claim without a pin would
+  write. Selection happens before the image size is known (§9.1 step 2), so
+  `targetDisk` says nothing about whether a given image fits. Omitted when no
+  disk qualifies; in inspect mode that is not a failure, and the report is
+  still posted.
+
+A v4.5 controller decodes the four fields and tolerates their absence, whether
+from an older inspector or from a field the inspector could not determine.
+Recording them on the `PhysicalHost` is controller-side (#287).
+
+> **Implementation status (v4.5):** `InspectionReportRequest` decodes the four
+> fields, and the golden report carries them. The controller does not record
+> them yet (#287), and does not yet render an inspect boot (#289).
 
 ### 6.1 Validation rules the inspector MUST satisfy
 
@@ -659,6 +725,11 @@ evaluate correctly:
 - **Disk size**: `disks[].sizeGB` is summed for `MinDiskGB`; emit integer GB.
 - **NIC IPs**: `nics[].ipAddresses` MUST be a real JSON array of individual
   address strings — not a single comma-joined string.
+- **v4.5 optional fields**: when present, `bootMACAddress` MUST equal the
+  `macAddress` of one `nics[]` entry, `targetDisk` MUST equal the `name` of one
+  `disks[]` entry, `systemUUID` MUST be the 36-character lower-case form above,
+  and `contractVersion` MUST be `v` followed by the version number (`v4.5`). A
+  value the inspector cannot determine is omitted, never sent empty or guessed.
 
 ---
 
@@ -891,6 +962,9 @@ phases**:
 `--dry-run` runs **Phase 1 only** (steps 1–3 below), making no destructive change
 and never rebooting — this is the CI / report-only mode.
 
+Inspect mode (`beskar7.mode=inspect`, v4.5) is the production form of the same
+idea: Phase 1 only, for a host nobody has claimed yet, then power off (§9.4).
+
 ### 9.1 Required steps
 
 The inspector MUST:
@@ -1068,6 +1142,42 @@ The controller fails a run that reports nothing within `--cleaning-timeout`
 (default 20 min) with `HostCleaned=False`, reason `CleaningTimedOut`, and
 holds the host like a reported failure.
 
+### 9.4 Inspect mode (v4.5)
+
+With `beskar7.mode=inspect` on the cmdline the inspector runs Phase 1 for a
+host nobody has claimed, so its report is on the `PhysicalHost` before any
+claim (#284). It:
+
+1. Parses the cmdline without requiring `beskar7.target`,
+   `beskar7.target-digest` or `beskar7.provider-id`, and acts on none of them,
+   nor on `beskar7.disk` or `beskar7.ip`, if present (§5). Brings up the
+   network (§8.2); an inspect boot carries no `beskar7.ip`, so this is DHCP.
+2. Probes the hardware, selects the target disk as §9.1 step 2 does (always by
+   auto-selection, since no `beskar7.disk` is rendered) without writing it, and
+   builds the §6 report with the v4.5 fields. No eligible disk is not a
+   failure: `targetDisk` is omitted.
+3. `POST`s the report to `/inspection` (§4.2) as in §9.1 step 3: **202** is
+   success, a transient failure is retried with backoff within
+   `beskar7.timeout`, and a `401` ends the run without a retry.
+4. SHOULD power the host off, once the report is accepted or the inspector
+   gives up. Ending the run, including forcing the host off, is the
+   controller's job and part of the onboarding work (#289); the power-off only
+   keeps the host from sitting in the ramdisk until then.
+
+In inspect mode the inspector MUST NOT call `/bootstrap`, `/network-data`,
+`/provisioned`, `/provision-failed`, `/cleaned` or `/clean-failed`, MUST NOT
+fetch or write any image, and MUST NOT write, wipe or partition any disk,
+write the ESP or change the firmware boot entries. There is no failure
+callback: an inspector that cannot report exits (to the debug shell when
+`beskar7.debug` is set) or powers off, and the controller ends the run on its
+onboarding timeout (#289).
+
+**Older inspectors.** A v4.3 or older inspector given an inspect boot fails
+`MissingRequired` on the absent `beskar7.target`, and a v4.4 inspector refuses
+`beskar7.mode=inspect` as an unknown value (§5). Neither reports nor touches a
+disk, so the controller sees an onboarding timeout and nothing on the host has
+changed.
+
 ---
 
 ## 10. Versioning and anti-drift
@@ -1113,6 +1223,17 @@ holds the host like a reported failure.
     checks the served bytes and each status. Like the provider-id fixture, it
     does not prove the inspector writes the file; that half is the inspector's
     own test.
+  - [`test/contract/golden_inspect_boot_cmdline.txt`](../test/contract/golden_inspect_boot_cmdline.txt)
+    (v4.5): the byte-exact `/boot` render of an inspect boot, for the inputs of
+    `golden_boot_cmdline.txt` without a claim's parameters. The inspector's
+    cmdline tests parse it. Until the controller renders inspect boots (#289),
+    `TestGoldenInspectBootCmdline_MatchesProvisioningRender` (`test/contract/`)
+    derives it from the provisioning fixture (drop the claim's parameters,
+    insert `beskar7.mode=inspect` after `beskar7.token`) and asserts the bytes
+    match; #289 replaces that derivation with the real render.
+  - The golden report carries the four v4.5 fields (§6), and
+    `controllers/inspection_contract_test.go` also decodes, strictly, a copy
+    without them, which is what an older inspector sends.
   - `controllers/boot_handler_test.go` additionally proves the render-time and
     stamp-time `ProviderID` values can never diverge (both call the same
     `providerID()`) and that `beskar7.provider-id` renders unconditionally,
@@ -1148,6 +1269,7 @@ holds the host like a reported failure.
 | **v4.2** | **Per-host `ProviderID` delivery for templated pools/HA (D-014 P2) — §6 report schema and golden fixture unchanged. Additive and backward-compatible.** A shared `Beskar7MachineTemplate`/bootstrap-config template cannot pin a per-host `ProviderID` (P1's hand-authored, one-Machine-at-a-time pattern breaks for `MachineDeployment` pools and multi-replica control planes). Adds a new required cmdline param `beskar7.provider-id=b7://{ns}/{host}` (§5), rendered by `/boot` immediately after `beskar7.target-digest` and before `beskar7.ca`, and **always** rendered (the controller always knows the host's identity — no omitted form). The value is `providerID(ph.Namespace, ph.Name)`, the identical call `handleReadyHost` uses to stamp `Beskar7Machine.Spec.ProviderID`, so the rendered and stamped values cannot diverge by construction. Adds a new `COS_OEM` artifact `/oem/beskar7/provider-id` (§9.1 step 5.4): the inspector writes the cmdline value verbatim (no trailing newline, mode `0600`, root-owned) during the *same* mount session as `99_beskar7.yaml`, no new mount or fetch. A shared boot-time stage in the node's bootstrap config reads this file to set a per-host kubelet `--provider-id` before the k8s distro starts — the residual per-distro glue that lets a shared template still produce a correct, unique `Node.spec.providerID` per replica. **Backward-compatible:** a v4.1 inspector ignores the unknown cmdline param and never writes the new artifact (P1's single hand-authored Machine path is unaffected); a v4.2 controller tolerates a v4.1 inspector. **Controller side**: `controllers/boot_handler.go` — `validateProviderID` (anchored `^b7://[a-z0-9.-]+/[a-z0-9.-]+$`, SEC-7 defence-in-depth) + the `beskar7.provider-id` render in `buildBootIPXEScript`/`renderBootScript`; new golden fixtures `test/contract/golden_boot_cmdline.txt` and `test/contract/golden_provider_id_artifact.json` (§10); `controllers/deploy_contract_test.go` (new). Inspector side: `CONTRACT_VERSION="v4.2"`, cmdline parser + `COS_OEM` writer for `/oem/beskar7/provider-id`, per `.claude/context/GA-P2-VALIDATION.md` §1.5 (spec only from this repo's side — cross-repo). |
 | **v4.3** | **Per-host network data for the installed OS (#283, #300). §5 cmdline, §6 report schema and existing golden fixtures unchanged. Additive and backward-compatible.** Adds a sixth HTTPS endpoint, `GET /api/v1/network-data/{ns}/{host}` (§4.6): bearer-gated with the same rule as §4.3, it serves verbatim the `networkData` key of the Secret `PhysicalHost.spec.networkDataSecretRef` names, which must opt in with `beskar7.infrastructure.cluster.x-k8s.io/network-data-host: <hostName>`. `200` bytes (≤64 KiB), `404` only when the host has no ref, `401` for the bearer gate and any resolution failure after it, `409` ref set but Secret refused, `500` read error. A host whose `NetworkDataReady` is not `True` is not claimed, and a claimed one is not booted (`WaitingForNetworkData`), so `409` only covers a Secret that changes after that check. Adds a `COS_OEM` artifact `/oem/beskar7/network-data` (§9.1 step 5.4), written in the same mount session as `99_beskar7.yaml`, removed on inject failure (step 5.8), and removed on `404` when the image already carries one; the inspector fetches it before the disk write (step 4). New golden fixture `test/contract/golden_network_data_artifact.json`. Controller side: #302. Inspector side: `CONTRACT_VERSION="v4.3"`, beskar7-inspector#69. |
 | **v4.4** | **Opt-in disk wipe on release (#306). §6 report schema and golden fixtures unchanged. Additive.** `PhysicalHost.spec.cleaning.mode` (`Disabled` default, or `Metadata`), and `spec.cleaning.request` to retry a failed run. A host released with `Metadata` goes `Cleaning` instead of `Available`: the `PhysicalHost` controller mints cleaning credentials (bootstrap-token Secret keys `purpose: clean` and `cleaning-image-url`, no consumer), sets a one-time PXE boot and powers the host on. `/boot` renders `beskar7.mode=clean` (§5) from `--cleaning-image-url` with none of a claim's parameters. Two new endpoints, `POST /api/v1/cleaned/{ns}/{host}` (§4.7) and `POST /api/v1/clean-failed/{ns}/{host}` (§4.8), accept only the cleaning token, which no other route accepts. Clean-mode inspector behaviour in §9.3. **Controller side**: `controllers/physicalhost_cleaning.go`, `controllers/cleaning_handler.go` (new); `boundCleaningCredentials`; `StateCleaning`, `HostCleaned` condition, `status.cleaning`; flags `--cleaning-image-url`, `--cleaning-timeout`. Inspector side: `CONTRACT_VERSION="v4.4"`, the clean mode. |
+| **v4.5** | **Inspect mode for onboarding (#284, #286). Additive; no endpoint added.** `beskar7.mode=inspect` (§5): a boot carrying it has none of a claim's parameters (§4.1) and targets an unclaimed host in an onboarding run, which the controller does not render yet (#289), and the inspector runs Phase 1 only: network, probe, `POST /inspection`, power off. It never calls `/bootstrap`, `/network-data`, `/provisioned`, `/provision-failed`, `/cleaned` or `/clean-failed`, and never touches a disk (§9.4). `beskar7.target`, `beskar7.target-digest` and `beskar7.provider-id` are required only without `beskar7.mode`. The §6 report gains four optional fields on every run: `contractVersion`, `systemUUID` (SMBIOS Type 1), `bootMACAddress` (the provisioning NIC, one of `nics[]`) and `targetDisk` (the §9.1 step 2 selection, one of `disks[]`); the golden report carries them. New fixture `test/contract/golden_inspect_boot_cmdline.txt`. An older inspector never reports in inspect mode (a v4.3 one fails `MissingRequired`, a v4.4 one refuses the mode), so the onboarding timeout ends the run. **Controller side**: `InspectionReportRequest` decodes the four fields (this change); recording them on the `PhysicalHost` (#287), the onboarding run's credentials (#288), and the inspect render and run (#289) follow. Inspector side: `CONTRACT_VERSION="v4.5"`, beskar7-inspector#66. |
 
 ### 10.2 Clarifications (no version bump)
 

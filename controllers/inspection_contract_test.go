@@ -6,8 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"testing"
 )
+
+// goldenV45Fields are the optional report fields contract v4.5 added (§6).
+var goldenV45Fields = []string{"contractVersion", "systemUUID", "bootMACAddress", "targetDisk"}
 
 // goldenInspectionReportPath is the canonical contract fixture shared with the
 // beskar7-inspector repo. The inspector emits this exact wire format and asserts
@@ -93,6 +97,67 @@ func TestInspectorReportContract(t *testing.T) {
 		if err := dec.Decode(&req); err != nil {
 			t.Fatalf("strict decode failed — the golden fixture carries a field "+
 				"InspectionReportRequest does not model (schema drift): %v", err)
+		}
+	})
+
+	// 2a. An inspector older than v4.5 sends none of the optional v4.5 fields;
+	//     its report must still decode, strictly, with every other field intact.
+	t.Run("decodes a report without the v4.5 fields (older inspector)", func(t *testing.T) {
+		var obj map[string]any
+		if err := json.Unmarshal(golden, &obj); err != nil {
+			t.Fatalf("decode golden to map: %v", err)
+		}
+		for _, key := range goldenV45Fields {
+			if _, ok := obj[key]; !ok {
+				t.Fatalf("golden report lacks %q, so this case proves nothing", key)
+			}
+			delete(obj, key)
+		}
+		older, err := json.Marshal(obj)
+		if err != nil {
+			t.Fatalf("re-encode without the v4.5 fields: %v", err)
+		}
+
+		dec := json.NewDecoder(bytes.NewReader(older))
+		dec.DisallowUnknownFields()
+		var req InspectionReportRequest
+		if err := dec.Decode(&req); err != nil {
+			t.Fatalf("a pre-v4.5 report no longer decodes: %v", err)
+		}
+		if req.ContractVersion != "" || req.SystemUUID != "" || req.BootMACAddress != "" || req.TargetDisk != "" {
+			t.Errorf("v4.5 fields set from a report that has none: %+v", req)
+		}
+		if len(req.Disks) != goldenNumDisks || len(req.NICs) != goldenNumNICs {
+			t.Errorf("disks/NICs lost: got %d/%d, want %d/%d", len(req.Disks), len(req.NICs), goldenNumDisks, goldenNumNICs)
+		}
+	})
+
+	// 2b. The fixture is what the inspector mirrors, so its v4.5 values must
+	//     themselves follow the §6.1 rules.
+	t.Run("v4.5 fields follow the §6.1 rules", func(t *testing.T) {
+		var req InspectionReportRequest
+		if err := json.Unmarshal(golden, &req); err != nil {
+			t.Fatalf("decode failed: %v", err)
+		}
+		if !regexp.MustCompile(`^v[0-9]+(\.[0-9]+)?$`).MatchString(req.ContractVersion) {
+			t.Errorf("contractVersion %q is not v<major>[.<minor>]", req.ContractVersion)
+		}
+		if !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`).MatchString(req.SystemUUID) {
+			t.Errorf("systemUUID %q is not the 36-character lower-case form", req.SystemUUID)
+		}
+		macFound := false
+		for _, n := range req.NICs {
+			macFound = macFound || n.MACAddress == req.BootMACAddress
+		}
+		if !macFound {
+			t.Errorf("bootMACAddress %q matches no nics[].macAddress", req.BootMACAddress)
+		}
+		diskFound := false
+		for _, d := range req.Disks {
+			diskFound = diskFound || d.Name == req.TargetDisk
+		}
+		if !diskFound {
+			t.Errorf("targetDisk %q matches no disks[].name", req.TargetDisk)
 		}
 	})
 
