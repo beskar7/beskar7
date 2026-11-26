@@ -1068,9 +1068,8 @@ kubectl delete beskar7machine <name> -n <namespace>
 2. Is `Beskar7Machine.Spec.InspectionImageURL` set to the correct HTTPS base URL?
 3. Is the `/boot` endpoint reachable from the provisioning network?
 4. Review the serial console for kernel panics or inspector error messages.
-5. Enable `beskar7.debug=true` in the boot parameters — not available via the CRD
-   This is not currently a CRD field; you can temporarily enable it by patching
-   `buildBootIPXEScript` in a local build.
+   After a failure the inspector prints the error and stops; it has no shell
+   and no debug mode.
 
 ### Digest Verification Failures
 

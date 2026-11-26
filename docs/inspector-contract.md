@@ -626,7 +626,7 @@ these from `/proc/cmdline`.
 | `beskar7.disk` | no | Operator override pinning the target disk — a stable device path (`/dev/disk/by-id/...`, `/dev/disk/by-path/...`) or a kernel name (`/dev/nvme0n1`, `sda`). When **absent**, the inspector auto-selects the smallest eligible disk (§9.1 step 2). When **present**, the inspector MUST resolve it once to its canonical whole-disk kernel device (`/dev/<kname>`, following any `by-id`/`by-path` symlink) and thereafter use *that resolved node* for both validation and the write, so the device validated is the device written (no TOCTOU re-lookup). It MUST use exactly that device and MUST abort — never silently falling back to auto-selection (a wrong pin fails loudly) — if the device is missing, not a block device, **not a whole disk** (a partition, `dm`/loop, or other non-whole-disk node), removable, read-only, **backs the running ramdisk**, or is smaller than the image. The image's size is known only once it streams, so that last check is the §8.1 size bound: the write is capped at the pinned disk's capacity, and an image that does not fit aborts as a size-limit breach. Sourced from the optional `Beskar7Machine.Spec.TargetDisk` field, rendered by `/boot` after `beskar7.ca` when set. Non-secret. |
 | `beskar7.mode` | no (v4.4) | `clean` on a cleaning boot (§4.1, §9.3), or `inspect` on an onboarding boot (v4.5; §4.1, §9.4). **Absent** means a provisioning run, as before v4.4. A cleaning or inspect boot carries none of `beskar7.target`, `beskar7.target-digest`, `beskar7.provider-id`, `beskar7.disk` or `beskar7.ip`, so the inspector MUST NOT require them in either mode, and MUST NOT act on them if present. Any other value MUST be refused: the inspector fails closed, calling no endpoint and touching no disk. A v4.4 inspector therefore refuses `inspect`. Non-secret. |
 | `beskar7.timeout` | no | Inspector-side overall timeout (seconds). |
-| `beskar7.debug` | no | `true` to enable verbose logging / debug shell on failure. |
+| `beskar7.debug` | no | `true` asks for verbose console logging. The log format is not part of the contract, and the inspector has no shell to drop to. The controller does not render it today. |
 | `BOOTIF` | no | The provisioning NIC's MAC in the pxelinux/iPXE form `01-aa-bb-cc-dd-ee-ff` (a `01` hardware-type prefix + the MAC with dashes). **Not** a `beskar7.*` key — it is the established netboot convention. `/boot` renders it from a `?mac=<mac>` query the operator's first-stage iPXE appends (e.g. `${net0/mac}`); see §4.1, §8.2. The inspector DHCP-configures the matching interface. **Absent** → a single-NIC host uses its one NIC; a multi-NIC host DHCP-races all links and applies the gatewayed winner (§8.2). `BOOTIF` is the deterministic pin and is the way to select a specific network. Non-secret. |
 | `beskar7.ip` | no | Static-network override for DHCP-less / VLAN-pinned provisioning networks. Format: kernel `ip=` subset `<ip>::[<gw>]:<mask>[:<dns>]` where `<ip>` is a dotted IPv4, `<gw>` is an optional dotted IPv4 gateway (omit for a gateway-less net), `<mask>` is a dotted IPv4 netmask or a bare CIDR prefix-length integer (`0`–`32`), and `<dns>` is an optional dotted IPv4 resolver. Sourced from the optional `Beskar7Machine.Spec.StaticIP` field; rendered by `/boot` after `beskar7.disk` (or after `beskar7.ca` when `beskar7.disk` is absent) when set, and omitted entirely when absent. When `beskar7.ip` is present, the inspector configures the selected provisioning NIC statically and **skips DHCP**. The inspector selects the NIC by `BOOTIF` (when present); a multi-NIC host with `beskar7.ip` but no `BOOTIF` is rejected by the inspector (§8.2). Non-secret. |
 
@@ -1069,8 +1069,8 @@ The inspector MUST:
       `99_beskar7.yaml` write, the `provider-id` write, the `network-data` write,
       `fsync`), the inspector MUST remove the partial `99_beskar7.yaml` (and, if
       written, the partial `provider-id` and `network-data` files) and unmount
-      `COS_OEM` before it stops or drops to the debug
-      shell — it MUST NOT leave the join secret on a mounted-then-abandoned partition
+      `COS_OEM` before it stops — it MUST NOT leave the join secret on a
+      mounted-then-abandoned partition
       or in the partial file. The user-data buffer MUST still be zeroed on this path.
       A failed provisioned callback (step 6) is not a cleanup trigger: by then both
       files are complete and `COS_OEM` is unmounted (step 5), and the controller may
@@ -1108,10 +1108,9 @@ apart. The inspector therefore MUST treat the GET as a **poll**, not a one-shot:
   MUST retry with backoff, not abort. A `200` carrying user-data is the signal to
   enter Phase 2 (step 5).
 - The inspector MUST bound the poll by `beskar7.timeout` (or a build default). On
-  timeout it MUST NOT write the disk; it exits to the debug shell (if
-  `beskar7.debug`) or powers the behaviour off to a non-destructive failure that
-  the controller observes as an inspection/provisioning timeout (it re-mints a
-  fresh nonce + token on the next attempt, §7).
+  timeout it MUST NOT write the disk; it stops or powers off, a non-destructive
+  failure that the controller observes as an inspection/provisioning timeout (it
+  re-mints a fresh nonce + token on the next attempt, §7).
 - A `401`/`403` is **not** retryable the same way — it indicates an expired or
   wrong bearer token (the 60-min token lifetime, §3); the inspector MUST abort
   rather than spin (the controller must re-provision with a fresh token).
@@ -1168,9 +1167,8 @@ In inspect mode the inspector MUST NOT call `/bootstrap`, `/network-data`,
 `/provisioned`, `/provision-failed`, `/cleaned` or `/clean-failed`, MUST NOT
 fetch or write any image, and MUST NOT write, wipe or partition any disk,
 write the ESP or change the firmware boot entries. There is no failure
-callback: an inspector that cannot report exits (to the debug shell when
-`beskar7.debug` is set) or powers off, and the controller ends the run on its
-onboarding timeout (#289).
+callback: an inspector that cannot report stops or powers off, and the
+controller ends the run on its onboarding timeout (#289).
 
 **Older inspectors.** A v4.3 or older inspector given an inspect boot fails
 `MissingRequired` on the absent `beskar7.target`, and a v4.4 inspector refuses
@@ -1377,6 +1375,16 @@ change. These are not new contract versions.
   **The wire is unchanged** and an inspector needs no change: a mismatch is one
   more `409`, which already fails the deploy before the disk write. A Secret
   without the annotation behaves as before.
+- **Debug shell (2026-11-26):** §5, §9.1 step 8, §9.2 and §9.4 said a failed
+  inspector drops to a debug shell when `beskar7.debug` is set. There is no
+  such shell: the initramfs is the inspector binary alone, with no shell or
+  userland, the inspector parses `beskar7.debug` but does not act on it, and
+  the controller never renders it. On a failure the inspector logs the error to
+  the console and stops. Since PID 1 must not exit, today it parks until the
+  controller's timeout re-drives the host. The text now says the inspector
+  stops or powers off, and §5 describes `beskar7.debug` as a request for
+  verbose console logging whose format the contract does not define (#343).
+  Nothing changed in the inspector, the controller or on the wire.
 
 ---
 
