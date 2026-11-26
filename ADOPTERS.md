@@ -17,11 +17,9 @@ the maintainers understand how the project is used.
 
 ## Adopters list
 
-```markdown
 | Organization | Type | Adoption level | Description |
 | ------------ | ---- | -------------- | ----------- |
 | [CLASTIX](https://clastix.io) | Vendor | Production | Engine for the Bare Metal management in kMetal, the enterprise offering leveraging the concept of Kubernetes Hosted Control Planes |
-```
 
 ## Adding your organization
 
