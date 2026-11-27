@@ -110,6 +110,22 @@ Within a frozen `v4.x` line the changes are additive, so a controller tolerates 
 inspector one minor version behind — it simply does not get the newer capability
 (see `docs/inspector-contract.md` §14). Do not rely on that across a major bump.
 
+## `v0.13.0` → next release: host pools
+
+Apply the CRDs before the controller, as in [Before you start](#before-you-start): the release adds the
+cluster-scoped `PhysicalHostPool` and new fields on `PhysicalHost` and `Beskar7Machine`. Host pools stay off until
+you start the manager with `--enable-host-pools`, see [PhysicalHostPool](physicalhostpool.md).
+
+### Behaviour change: a wipe drops the inspection report
+
+This applies with host pools off too. A host's inspection report is now dropped when its wipe starts, because the
+claim run's inspector was the claimant's choice. In `v0.12.0` and `v0.13.0` the report stayed. So after its next
+release a host with `spec.cleaning.mode: Metadata` has no report, and a machine with
+`hardwareRequirements.matchAt: Claim` skips it and waits with `PhysicalHostAssociated=False`
+(`NoMatchingPhysicalHost`). Nothing inspects an `Available` host: a cleaning run does not report hardware
+(contract §9.3) and the next report comes from a claim's run, so `matchAt: Claim` never matches a `Metadata` host.
+If you use `matchAt: Claim` with `Metadata` hosts, steer the claim with `hostSelector` labels instead.
+
 ## `v0.12.0` → `v0.13.0` — moved to `github.com/beskar7`
 
 `v0.13.0` is the first release from `github.com/beskar7`. The repositories moved there from `github.com/projectbeskar`

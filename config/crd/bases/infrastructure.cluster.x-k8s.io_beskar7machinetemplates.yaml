@@ -100,6 +100,10 @@ spec:
                       inspectionImageURL:
                         pattern: ^https?://[^\s]+$
                         type: string
+                      poolRef:
+                        maxLength: 63
+                        pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
+                        type: string
                       providerID:
                         maxLength: 512
                         minLength: 1

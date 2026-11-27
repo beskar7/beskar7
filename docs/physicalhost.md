@@ -108,7 +108,7 @@ A run that reports `/clean-failed`, or nothing within `--cleaning-timeout` (defa
 kubectl patch physicalhost <host> --type merge -p '{"spec":{"cleaning":{"request":"retry-'"$(date +%s)"'"}}}'
 ```
 
-An unclaimed host with `Metadata` and no state at all is wiped too. That covers a host created with the field set, which is wiped once before it is first `Available`, and a host moved by `clusterctl move`, which drops `status`: a host that was `Cleaning` or held in `Error` on the source would otherwise arrive unwiped and become `Available`.
+An unclaimed host with `Metadata` and no state at all is wiped too. That covers a host created with the field set, which is wiped once before it is first `Available`, and a host moved by `clusterctl move`, which drops `status`: a host that was `Cleaning` or held in `Error` on the source would otherwise arrive unwiped and become `Available`. Setting `Metadata` on any other `Available` host does not wipe it; the wipe runs at its next release. The exception is a `PhysicalHostPool` member: a pool claims only hosts with `HostCleaned=True`, so an `Available` member with `Metadata` and no `HostCleaned=True` is wiped once (see [PhysicalHostPool](physicalhostpool.md)). A wipe also drops the host's `status.inspectionReport`, since it came from the last claimant's inspector, so `hardwareRequirements.matchAt: Claim` does not match the host until a new report exists.
 
 Without `--cleaning-image-url` (chart value `cleaning.imageURL`), hosts that opted in wait in `Cleaning` with `HostCleaned=False`, `CleaningNotConfigured`.
 
