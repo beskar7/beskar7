@@ -294,6 +294,18 @@ func (r *Beskar7MachineReconciler) claimSearch(ctx context.Context, b7machine *i
 // the pool (PoolClaimValid reports that). Release takes the claim even after the
 // switch turned pools off, so a host is given back.
 func (r *Beskar7MachineReconciler) findHeldHost(ctx context.Context, b7machine *infrav1.Beskar7Machine, forRelease bool) (*infrav1.PhysicalHost, error) {
+	host, err := r.findCachedHeldHost(ctx, b7machine, forRelease)
+	if err != nil {
+		return nil, err
+	}
+	if host != nil {
+		r.forgetClaim(b7machine)
+		return host, nil
+	}
+	return r.recordedHost(ctx, b7machine, forRelease)
+}
+
+func (r *Beskar7MachineReconciler) findCachedHeldHost(ctx context.Context, b7machine *infrav1.Beskar7Machine, forRelease bool) (*infrav1.PhysicalHost, error) {
 	own := &infrav1.PhysicalHostList{}
 	if err := r.List(ctx, own, client.InNamespace(b7machine.Namespace)); err != nil {
 		return nil, err
@@ -303,7 +315,7 @@ func (r *Beskar7MachineReconciler) findHeldHost(ctx context.Context, b7machine *
 			return &own.Items[i], nil
 		}
 	}
-	if b7machine.Spec.PoolRef == "" || (!forRelease && !r.HostPools) {
+	if !r.looksThroughPool(b7machine, forRelease) {
 		return nil, nil
 	}
 	held := &infrav1.PhysicalHostList{}
@@ -374,6 +386,7 @@ func (r *Beskar7MachineReconciler) failHardwareRequirements(ctx context.Context,
 		return ctrl.Result{}, nil
 	}
 	r.booted.Delete(host.UID)
+	r.forgetClaim(b7machine)
 	return ctrl.Result{}, nil
 }
 
