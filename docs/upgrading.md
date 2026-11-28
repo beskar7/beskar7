@@ -128,6 +128,15 @@ release a host with `spec.cleaning.mode: Metadata` has no report, and a machine 
 (contract §9.3) and the next report comes from a claim's run, so `matchAt: Claim` never matches a `Metadata` host.
 If you use `matchAt: Claim` with `Metadata` hosts, steer the claim with `hostSelector` labels instead.
 
+### Pin `targetDisk` by kernel name
+
+The `v0.13.0` docs recommended a `/dev/disk/by-id` or `/dev/disk/by-path` pin for `targetDisk`. Such a pin fails
+the provisioning run, because the inspector has no udev and those links don't exist in it
+([#350](https://github.com/beskar7/beskar7/issues/350)). Change any pin on a `Beskar7Machine` or
+`Beskar7MachineTemplate` to a kernel name (`/dev/nvme0n1`, `sda`), or leave `targetDisk` empty so the inspector
+picks the smallest eligible disk. A kernel name can point at a different disk on a host with several disks of one
+kind.
+
 ### Inspector: keep `v0.5.2`
 
 `v0.14.0` speaks contract `v4.5`, which only adds inspect mode and four optional report fields. The controller

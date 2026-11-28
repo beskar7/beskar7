@@ -28,7 +28,7 @@ A Kubernetes operator that implements the Cluster API infrastructure provider fo
 
 **Version:** v0.14.0. Adds `PhysicalHostPool` to share `PhysicalHost`s across namespaces (off by default, `--enable-host-pools`, see [PhysicalHostPool](docs/physicalhostpool.md)) and fixes a machine that could claim a second host. Apply the CRDs before the controller. A wipe now drops the host's inspection report, so `matchAt: Claim` no longer matches `Metadata` hosts. The contract moves to `v4.5`, which is additive: keep inspector `v0.5.2`. Coming from an older release, the steps of the releases in between apply too: read [upgrading](docs/upgrading.md).  
 **API:** `infrastructure.cluster.x-k8s.io/v1beta2` is the only served version — the `v1beta1` schema renamed in place, with no conversion webhook: `v1beta1` CRDs and objects must be recreated (see [Upgrading](docs/upgrading.md)). From here the schema evolves **additive-only**.  
-**Contract:** controller↔inspector wire contract **v4.5, frozen** ([contract](docs/inspector-contract.md)). v4.5 is additive, so a `contract-v4.4` [inspector release](https://github.com/beskar7/beskar7-inspector/releases) (`v0.5.2`) still works.
+**Contract:** controller↔inspector wire contract **v4.5, frozen** ([contract](docs/inspector-contract.md)). v4.5 is additive, so a `contract-v4.4` [inspector release](https://github.com/beskar7/beskar7-inspector/releases) (`v0.5.2`) still works.  
 **Upgrading:** v0.4.0 is **not** compatible with v0.3.x, and the alpha series contains breaking API changes — see [Upgrading](docs/upgrading.md) and the [CHANGELOG](CHANGELOG.md).
 
 ## Installation

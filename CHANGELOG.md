@@ -23,6 +23,8 @@ no `v4.5` inspector is needed yet. Built with Go 1.27.4.
 > 2. **`hardwareRequirements.matchAt: Claim` with `spec.cleaning.mode: Metadata` hosts** stops matching after the
 >    host's next wipe. Steer those claims with `hostSelector` labels instead.
 > 3. **Host pools stay off** until you start the manager with `--enable-host-pools` (Helm `hostPools.enabled`).
+> 4. **Pin `targetDisk` by kernel name** (`/dev/nvme0n1`, `sda`). A `/dev/disk/by-id` or `/dev/disk/by-path` pin,
+>    which the `v0.13.0` docs recommended, fails the provisioning run.
 
 ### Added
 
@@ -70,6 +72,12 @@ no `v4.5` inspector is needed yet. Built with Go 1.27.4.
   deletion. Either way a host stayed `InUse` with nothing to release it. The controller now remembers the host it
   last claimed for each machine and reads it from the API server, with the same claim checks, until the cache
   catches up.
+- **`targetDisk` docs: pin by kernel name (#352).** The `targetDisk` godoc, `docs/api-reference.md` and
+  `examples/kairos-k3s-node.yaml` recommended a `/dev/disk/by-id` or `/dev/disk/by-path` pin. The inspector has no
+  udev, so those links don't exist when it resolves the pin, and the provisioning run fails
+  ([#350](https://github.com/beskar7/beskar7/issues/350)). The docs now say to pin by kernel name (`/dev/nvme0n1`,
+  `sda`). A kernel name follows the order the disks are probed in, so on a host with several disks of one kind it
+  can name a different disk on a later boot. Nothing changes in the API or the contract.
 
 ## [v0.13.0] - 2026-11-18
 
