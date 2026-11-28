@@ -285,14 +285,8 @@ func (r *Beskar7MachineReconciler) claimSearch(ctx context.Context, b7machine *i
 	return hostSearch{namespaces: pool.Spec.HostNamespaces, pool: pool.Name}, true, nil
 }
 
-// findHeldHost returns the host b7machine holds. Own namespace first, by scan
-// (claimedBy rejects a ConsumerRef naming another namespace, SEC-12); then, for
-// a pool machine, any namespace through the consumerRef index. Outside its own
-// namespace a machine takes only a claim it can prove is its own
-// (provesPoolClaim), for a release too: a forged claim naming the machine must
-// not end the release of the real one. It keeps the claim after the host leaves
-// the pool (PoolClaimValid reports that). Release takes the claim even after the
-// switch turned pools off, so a host is given back.
+// findHeldHost returns the host b7machine holds. When the cache doesn't show the
+// claim, it reads the host this reconciler last claimed for the machine through the API reader.
 func (r *Beskar7MachineReconciler) findHeldHost(ctx context.Context, b7machine *infrav1.Beskar7Machine, forRelease bool) (*infrav1.PhysicalHost, error) {
 	host, err := r.findCachedHeldHost(ctx, b7machine, forRelease)
 	if err != nil {
@@ -305,6 +299,14 @@ func (r *Beskar7MachineReconciler) findHeldHost(ctx context.Context, b7machine *
 	return r.recordedHost(ctx, b7machine, forRelease)
 }
 
+// findCachedHeldHost returns the host the cache shows b7machine holds. Own namespace first, by scan
+// (claimedBy rejects a ConsumerRef naming another namespace, SEC-12); then, for
+// a pool machine, any namespace through the consumerRef index. Outside its own
+// namespace a machine takes only a claim it can prove is its own
+// (provesPoolClaim), for a release too: a forged claim naming the machine must
+// not end the release of the real one. It keeps the claim after the host leaves
+// the pool (PoolClaimValid reports that). Release takes the claim even after the
+// switch turned pools off, so a host is given back.
 func (r *Beskar7MachineReconciler) findCachedHeldHost(ctx context.Context, b7machine *infrav1.Beskar7Machine, forRelease bool) (*infrav1.PhysicalHost, error) {
 	own := &infrav1.PhysicalHostList{}
 	if err := r.List(ctx, own, client.InNamespace(b7machine.Namespace)); err != nil {

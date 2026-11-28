@@ -244,6 +244,24 @@ var _ = Describe("A claim the cache has not seen yet", func() {
 			Expect(heldHosts()).To(ConsistOf("host-a"))
 		})
 
+		It("drops a record whose live host now names another machine", func() {
+			r := machineReconciler(view.client())
+			first := claim(r)
+			live := &infrav1.PhysicalHost{}
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(first), live)).To(Succeed())
+			live.Spec.ConsumerRef.Name = "another-machine"
+			live.Spec.ConsumerRef.UID = "another-uid"
+			Expect(k8sClient.Update(ctx, live)).To(Succeed())
+			view.reversed = true
+
+			again := claim(r)
+
+			Expect(again.Name).NotTo(Equal(first.Name))
+			Expect(heldHosts()).To(ConsistOf(again.Name))
+			recorded, _ := r.recentClaims.Load(b7m.UID)
+			Expect(recorded).To(Equal(client.ObjectKeyFromObject(again)))
+		})
+
 		It("drops the record once the cache shows the claim", func() {
 			r := machineReconciler(view.client())
 			claim(r)
@@ -253,6 +271,80 @@ var _ = Describe("A claim the cache has not seen yet", func() {
 
 			_, recorded := r.recentClaims.Load(b7m.UID)
 			Expect(recorded).To(BeFalse())
+		})
+	})
+
+	Describe("for a pool machine whose recorded host is in another namespace", func() {
+		const poolName = "claim-record-pool"
+
+		var (
+			poolMachine *infrav1.Beskar7Machine
+			poolHost    *infrav1.PhysicalHost
+		)
+
+		BeforeEach(func() {
+			hostNS := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{GenerateName: "claim-record-hosts-"}}
+			Expect(k8sClient.Create(ctx, hostNS)).To(Succeed())
+			DeferCleanup(func() { Expect(k8sClient.Delete(ctx, hostNS)).To(Succeed()) })
+			poolMachine = &infrav1.Beskar7Machine{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "claim-record-pool-machine",
+					Namespace: ns.Name,
+				},
+				Spec: infrav1.Beskar7MachineSpec{
+					InspectionImageURL: "http://boot-server/inspect.ipxe",
+					TargetImageURL:     "http://boot-server/kairos.tar.gz",
+					TargetImageDigest:  bootTestDigest,
+					PoolRef:            poolName,
+				},
+			}
+			Expect(k8sClient.Create(ctx, poolMachine)).To(Succeed())
+			poolHost = &infrav1.PhysicalHost{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pool-host",
+					Namespace: hostNS.Name,
+				},
+				Spec: infrav1.PhysicalHostSpec{
+					RedfishConnection: infrav1.RedfishConnection{
+						Address:              "https://192.168.100.1",
+						CredentialsSecretRef: "irrelevant",
+					},
+					ConsumerRef: &corev1.ObjectReference{
+						Kind:       "Beskar7Machine",
+						APIVersion: InfrastructureAPIVersion,
+						Name:       poolMachine.Name,
+						Namespace:  poolMachine.Namespace,
+					},
+					ConsumerPool: poolName,
+				},
+			}
+		})
+
+		readRecorded := func() *infrav1.PhysicalHost {
+			r := machineReconciler(view.client())
+			r.HostPools = true
+			r.recordClaim(poolMachine, poolHost)
+
+			host, err := r.recordedHost(ctx, poolMachine, false)
+
+			Expect(err).NotTo(HaveOccurred())
+			_, recorded := r.recentClaims.Load(poolMachine.UID)
+			Expect(recorded).To(Equal(host != nil))
+			return host
+		}
+
+		It("finds a claim it can prove: the control for the spec below", func() {
+			poolHost.Spec.ConsumerRef.UID = poolMachine.UID
+			Expect(k8sClient.Create(ctx, poolHost)).To(Succeed())
+
+			Expect(readRecorded()).NotTo(BeNil())
+		})
+
+		It("drops a forged claim that names the machine without its UID", func() {
+			poolHost.Spec.ConsumerRef.UID = "forged-uid"
+			Expect(k8sClient.Create(ctx, poolHost)).To(Succeed())
+
+			Expect(readRecorded()).To(BeNil())
 		})
 	})
 

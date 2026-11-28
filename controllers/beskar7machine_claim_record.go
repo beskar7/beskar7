@@ -39,11 +39,7 @@ func (r *Beskar7MachineReconciler) recordedHost(ctx context.Context, b7machine *
 	if !ok {
 		return nil, nil
 	}
-	key, ok := value.(client.ObjectKey)
-	if !ok {
-		r.forgetClaim(b7machine)
-		return nil, nil
-	}
+	key := value.(client.ObjectKey)
 	host := &infrav1.PhysicalHost{}
 	err := r.liveReader().Get(ctx, key, host)
 	if apierrors.IsNotFound(err) {

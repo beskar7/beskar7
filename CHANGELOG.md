@@ -36,6 +36,14 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   `rbac-host-pools.yaml`): read `physicalhostpools` and `namespaces`, the pool finalizer and status.
   `examples/host-pools.yaml` is now `examples/host-selector.yaml`. See [`docs/physicalhostpool.md`](docs/physicalhostpool.md).
 
+### Fixed
+
+- **A machine no longer claims a second host when the cache hasn't seen its first claim yet.** A `Beskar7Machine`
+  reconciled again before the cache showed its claim could claim a second `PhysicalHost`, or lose its host on
+  deletion. Either way a host stayed `InUse` with nothing to release it. The controller now remembers the host it
+  last claimed for each machine and reads it from the API server, with the same claim checks, until the cache
+  catches up.
+
 ## [v0.13.0] - 2026-11-18
 
 The first release from `github.com/beskar7`. The repositories moved there from `github.com/projectbeskar`, and this
