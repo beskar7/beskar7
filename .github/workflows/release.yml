@@ -542,11 +542,26 @@ jobs:
         echo "" >> release-notes.md
         echo "All three container images are signed with keyless cosign. The manager image also carries a signed SPDX SBOM attestation, and the same SBOM is attached to this release as \`sbom.spdx.json\`. The manifests and metadata are not signed: \`checksums.txt\` lists their SHA-256 sums." >> release-notes.md
         
+    # The generated notes compare against the latest stable release, so an rc
+    # and its final release both list every PR since the previous stable one.
+    - name: Find the previous stable release
+      id: prev
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        TAG=$(gh release view -R "${{ github.repository }}" --json tagName -q .tagName || true)
+        if [ "$TAG" = "${{ github.ref_name }}" ]; then TAG=""; fi
+        echo "Previous stable release: ${TAG:-none, GitHub picks the base}"
+        echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
     - name: Create Release
       uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
       with:
         name: Beskar7 ${{ github.ref_name }}
         body_path: release-notes.md
+        # Appends "What's Changed" with each PR's author, so the release lists its contributors.
+        generate_release_notes: true
+        previous_tag: ${{ steps.prev.outputs.tag }}
         draft: false
         prerelease: ${{ contains(github.ref_name, '-') }}
         files: |
