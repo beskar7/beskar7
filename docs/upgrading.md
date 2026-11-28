@@ -9,7 +9,7 @@
 **alpha series before `v0.4.0` contains breaking changes**. Read the section
 for your starting version before upgrading.
 
-**Target `v0.13.0`, not `v0.6.0`.** `v0.6.0` cannot patch objects written by
+**Target `v0.14.0`, not `v0.6.0`.** `v0.6.0` cannot patch objects written by
 `v0.5.0` and freezes their status; `v0.6.1` fixed that, and every release since
 carries the fix.
 
@@ -62,6 +62,7 @@ from the release you deployed:
 
 | beskar7 release | contract |
 |---|---|
+| `v0.14.0` | `v4.5` **frozen** |
 | `v0.13.0` | `v4.4` **frozen** |
 | `v0.12.0` | `v4.4` **frozen** |
 | `v0.11.0` | `v4.3` **frozen** |
@@ -91,6 +92,7 @@ git show v0.4.0:test/contract/VERSION      # -> v4.2
 git show v0.11.0:test/contract/VERSION     # -> v4.3
 git show v0.12.0:test/contract/VERSION     # -> v4.4
 git show v0.13.0:test/contract/VERSION     # -> v4.4
+git show v0.14.0:test/contract/VERSION     # -> v4.5
 
 # earlier tags predate that file — read the contract doc header instead:
 git show v0.4.0-alpha.8:docs/inspector-contract.md | head -5
@@ -110,7 +112,7 @@ Within a frozen `v4.x` line the changes are additive, so a controller tolerates 
 inspector one minor version behind — it simply does not get the newer capability
 (see `docs/inspector-contract.md` §14). Do not rely on that across a major bump.
 
-## `v0.13.0` → next release: host pools
+## `v0.13.0` → `v0.14.0`: host pools
 
 Apply the CRDs before the controller, as in [Before you start](#before-you-start): the release adds the
 cluster-scoped `PhysicalHostPool` and new fields on `PhysicalHost` and `Beskar7Machine`. Host pools stay off until
@@ -125,6 +127,22 @@ release a host with `spec.cleaning.mode: Metadata` has no report, and a machine 
 (`NoMatchingPhysicalHost`). Nothing inspects an `Available` host: a cleaning run does not report hardware
 (contract §9.3) and the next report comes from a claim's run, so `matchAt: Claim` never matches a `Metadata` host.
 If you use `matchAt: Claim` with `Metadata` hosts, steer the claim with `hostSelector` labels instead.
+
+### Pin `targetDisk` by kernel name
+
+The `v0.13.0` docs recommended a `/dev/disk/by-id` or `/dev/disk/by-path` pin for `targetDisk`. Such a pin fails
+the provisioning run, because the inspector has no udev and those links don't exist in it
+([#350](https://github.com/beskar7/beskar7/issues/350)). Change any pin on a `Beskar7Machine` or
+`Beskar7MachineTemplate` to a kernel name (`/dev/nvme0n1`, `sda`), or leave `targetDisk` empty so the inspector
+picks the smallest eligible disk. A kernel name can point at a different disk on a host with several disks of one
+kind.
+
+### Inspector: keep `v0.5.2`
+
+`v0.14.0` speaks contract `v4.5`, which only adds inspect mode and four optional report fields. The controller
+decodes the new fields and does not render an inspect boot yet, so the inspector you run today (`v0.5.2`,
+`contract-v4.4`) keeps working for provisioning and the wipe. There is no `v4.5` inspector release yet and you
+don't need one.
 
 ## `v0.12.0` → `v0.13.0` — moved to `github.com/beskar7`
 
@@ -1256,14 +1274,14 @@ shape and the `b7://<namespace>/<name>` format are unchanged — this only matte
 ### Procedure
 
 ```bash
-# 0. These commands install the current release, v0.13.0. From v0.8.x or earlier, stop on v0.9.x first:
+# 0. These commands install the current release, v0.14.0. From v0.8.x or earlier, stop on v0.9.x first:
 #    do the v0.8.0 → v0.9.0 steps (annotate BMC credentials Secrets, set the control-plane endpoint),
 #    run step 1 with v0.9.0 (the v0.9.0 manifest, --version 0.9.0), then follow the
-#    v0.9.x → v0.10.0 section above, installing v0.13.0 where it names v0.10.0, and then the sections after it.
+#    v0.9.x → v0.10.0 section above, installing v0.14.0 where it names v0.10.0, and then the sections after it.
 # 1. CRDs (status schema changed; Helm never touches CRDs on upgrade).
-kubectl apply -f https://github.com/beskar7/beskar7/releases/download/v0.13.0/beskar7-manifests-v0.13.0.yaml
+kubectl apply -f https://github.com/beskar7/beskar7/releases/download/v0.14.0/beskar7-manifests-v0.14.0.yaml
 # or, for a chart install: apply charts/beskar7/crds/*.yaml, then
-helm upgrade beskar7 beskar7/beskar7 -n capb7-system --version 0.13.0 --reset-then-reuse-values
+helm upgrade beskar7 beskar7/beskar7 -n capb7-system --version 0.14.0 --reset-then-reuse-values
 
 # 2. Convert any MachineHealthCheck you maintain by hand to the v1beta2 schema and
 #    raise its timeouts (see examples/machinehealthcheck.yaml).
