@@ -166,6 +166,8 @@ type Beskar7MachineReconciler struct {
 	ChecksumRootCAs *x509.CertPool
 	// HostPools is --enable-host-pools: claims through a PhysicalHostPool and its watches.
 	HostPools bool
+	// APIReader reads a just-claimed host the cache may not have seen yet.
+	APIReader client.Reader
 
 	// checksumHTTPClient is the client for the checksum fetch, built on first use
 	// from ChecksumRootCAs (checksumClient).
@@ -184,6 +186,9 @@ type Beskar7MachineReconciler struct {
 	// the pass before it must not restart the host again; the request annotation
 	// covers that once the cache catches up, and after a controller restart.
 	booted sync.Map
+
+	// recentClaims maps a Beskar7Machine UID to the host last claimed for it.
+	recentClaims sync.Map
 }
 
 // bootClaim identifies the claim a host was booted for: the claiming machine,
@@ -1512,6 +1517,7 @@ func (r *Beskar7MachineReconciler) reconcileDelete(ctx context.Context, logger l
 			logger.Info("Released PhysicalHost", "host", host.Name)
 		}
 	}
+	r.forgetClaim(b7machine)
 
 	if controllerutil.RemoveFinalizer(b7machine, Beskar7MachineFinalizer) {
 		logger.Info("Removing finalizer")
@@ -1805,6 +1811,9 @@ func (r *Beskar7MachineReconciler) defaultFactory() error {
 func (r *Beskar7MachineReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := r.defaultFactory(); err != nil {
 		return err
+	}
+	if r.APIReader == nil {
+		r.APIReader = mgr.GetAPIReader()
 	}
 	// Register a cache field index on PhysicalHost.Status.State so that
 	// findAndClaimOrGetAssociatedHost can filter Available hosts server-side

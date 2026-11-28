@@ -196,11 +196,14 @@ func (r *Beskar7MachineReconciler) findAndClaimOrGetAssociatedHost(ctx context.C
 					internalmetrics.RecordHostClaimDuration(b7machine.Namespace, internalmetrics.ClaimOutcomeConflict, time.Since(claimStart))
 					return nil, ctrl.Result{RequeueAfter: requeueShortly}, nil
 				}
+				// The patch may have landed even though it failed.
+				r.recordClaim(b7machine, host)
 				logger.Error(err, "Failed to claim host")
 				internalmetrics.RecordHostClaimAttempt(b7machine.Namespace, internalmetrics.ClaimOutcomeError, internalmetrics.ConflictReasonNone)
 				internalmetrics.RecordHostClaimDuration(b7machine.Namespace, internalmetrics.ClaimOutcomeError, time.Since(claimStart))
 				return nil, ctrl.Result{}, err
 			}
+			r.recordClaim(b7machine, host)
 			internalmetrics.RecordHostClaimAttempt(b7machine.Namespace, internalmetrics.ClaimOutcomeSuccess, internalmetrics.ConflictReasonNone)
 			internalmetrics.RecordHostClaimDuration(b7machine.Namespace, internalmetrics.ClaimOutcomeSuccess, time.Since(claimStart))
 			return host, ctrl.Result{RequeueAfter: 5 * time.Second}, nil
