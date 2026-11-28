@@ -170,7 +170,7 @@ Beskar7, please add your organization to [ADOPTERS.md](ADOPTERS.md).
 
 Everyone is welcome at the Beskar7 Planning and Community Meeting. Add it to your calendar:
 
-<a target="_blank" href="https://calendar.google.com/calendar/event?action=TEMPLATE&amp;tmeid=NnNvZzBiMGhnaW9raGh0ZmFvdHAxNzdzZ2ZfMjAyNjEyMDNUMTUwMDAwWiB3aWxsaWFtLnJpenpvQG0&amp;tmsrc=william.rizzo%40gmail.com&amp;scp=ALL"><img border="0" src="https://calendar.google.com/calendar/images/ext/gc_button1_en.gif" alt="Google Calendar"></a>
+<a target="_blank" href="https://calendar.google.com/calendar/event?action=TEMPLATE&amp;tmeid=M3M1amxqcGpqcTA2aDIxYzMwNjNyNTEyZHJfMjAyNjEyMDNUMTUwMDAwWiAyZThhNTc5YTJjNDNhYWU3MzczOTQ3NDcwNDRhMWEyY2Y2MGI3MDdkMWUxZTRmMmYzZmMyOTVlYzAyZTUyZDBiQGc&amp;tmsrc=2e8a579a2c43aae737394747044a1a2cf60b707d1e1e4f2f3fc295ec02e52d0b%40group.calendar.google.com&amp;scp=ALL"><img border="0" src="https://calendar.google.com/calendar/images/ext/gc_button1_en.gif" alt="Google Calendar"></a>
 
 ## License
 
