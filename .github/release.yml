@@ -1,0 +1,5 @@
+# Config for GitHub's generated release notes (used by .github/workflows/release.yml).
+changelog:
+  exclude:
+    authors:
+      - dependabot[bot]
