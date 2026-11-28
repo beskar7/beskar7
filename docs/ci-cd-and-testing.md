@@ -294,10 +294,10 @@ osv-scanner scan image ghcr.io/beskar7/manager:latest
 
 ### Release Process
 
-1. **Create Release Tag** — the current release line is `v0.13.x`. Before 1.0, bump the minor for a release that changes operator-visible behaviour and the patch for the rest; a new minor also needs its `releaseSeries` entry in `metadata.yaml`. Use a `vX.Y.Z` (or `vX.Y.Z-pre`) format the `release.yml` workflow recognises.
+1. **Create Release Tag**: the current release line is `v0.14.x`. Before 1.0, bump the minor for a release that changes operator-visible behaviour and the patch for the rest; a new minor also needs its `releaseSeries` entry in `metadata.yaml`. Use a `vX.Y.Z` (or `vX.Y.Z-pre`) format the `release.yml` workflow recognises.
    ```bash
-   git tag v0.13.0
-   git push origin v0.13.0
+   git tag v0.14.0
+   git push origin v0.14.0
    ```
 
 2. **Automated Release** - GitHub Actions automatically:

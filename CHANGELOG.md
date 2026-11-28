@@ -6,6 +6,24 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [v0.14.0] - 2026-11-28
+
+Adds `PhysicalHostPool`, which shares `PhysicalHost`s across namespaces (off by default, `--enable-host-pools`),
+and fixes a machine that could claim a second host. New CRD, new fields on `PhysicalHost` and `Beskar7Machine`, and
+a new ClusterRole when pools are on. One behaviour change applies with pools off too: a wipe now drops the host's
+inspection report. The contract moves to `v4.5`, which is additive: keep inspector **`v0.5.2`** (`contract-v4.4`),
+no `v4.5` inspector is needed yet. Built with Go 1.27.4.
+
+> **Upgrade notes.** Details are in
+> [`docs/upgrading.md`](https://github.com/beskar7/beskar7/blob/v0.14.0/docs/upgrading.md#v0130--v0140-host-pools),
+> section `v0.13.0` → `v0.14.0`.
+>
+> 1. **Apply the CRDs before the controller.** The release adds the cluster-scoped `PhysicalHostPool` and new
+>    fields on `PhysicalHost` and `Beskar7Machine`.
+> 2. **`hardwareRequirements.matchAt: Claim` with `spec.cleaning.mode: Metadata` hosts** stops matching after the
+>    host's next wipe. Steer those claims with `hostSelector` labels instead.
+> 3. **Host pools stay off** until you start the manager with `--enable-host-pools` (Helm `hostPools.enabled`).
+
 ### Added
 
 - **Share `PhysicalHost`s across namespaces with a cluster-scoped `PhysicalHostPool` (#305).** Off by default:
@@ -35,6 +53,15 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
   tenants. **RBAC:** a new ClusterRole, only with pools on, `config/host-pools/host_pool_role.yaml` (Helm
   `rbac-host-pools.yaml`): read `physicalhostpools` and `namespaces`, the pool finalizer and status.
   `examples/host-pools.yaml` is now `examples/host-selector.yaml`. See [`docs/physicalhostpool.md`](docs/physicalhostpool.md).
+
+### Changed
+
+- **Contract `v4.5` (#344).** Adds inspect mode (`beskar7.mode=inspect`, for onboarding a host before any claim)
+  and four optional report fields: `contractVersion`, `systemUUID`, `bootMACAddress` and `targetDisk`. The controller
+  decodes the new fields but does not store them or render an inspect boot yet, so a `v4.4` inspector keeps working.
+  See [`docs/inspector-contract.md`](docs/inspector-contract.md).
+- **Dependencies:** `golang.org/x/net` 0.63.0, and new digests for the `golang:1.27.4` and `distroless/static` base
+  images.
 
 ### Fixed
 
@@ -2779,7 +2806,8 @@ For detailed implementation information, see the examples directory and document
 - CI: lint, tests, container build, CRD generation, Kind sanity checks.
 - Core controllers and CRDs for `PhysicalHost`, `Beskar7Machine`, `Beskar7Cluster`.
 
-[Unreleased]: https://github.com/beskar7/beskar7/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/beskar7/beskar7/compare/v0.14.0...HEAD
+[v0.14.0]: https://github.com/beskar7/beskar7/compare/v0.13.0...v0.14.0
 [v0.13.0]: https://github.com/beskar7/beskar7/compare/v0.12.0...v0.13.0
 [v0.12.0]: https://github.com/projectbeskar/beskar7/compare/v0.11.0...v0.12.0
 [v0.11.0]: https://github.com/projectbeskar/beskar7/compare/v0.10.2...v0.11.0
