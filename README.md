@@ -166,6 +166,12 @@ Found a security issue? Please report it privately — see [SECURITY.md](SECURIT
 This project follows a [Code of Conduct](CODE_OF_CONDUCT.md). See [MAINTAINERS.md](MAINTAINERS.md) for who maintains it. If you use
 Beskar7, please add your organization to [ADOPTERS.md](ADOPTERS.md).
 
+## Community Meeting
+
+Everyone is welcome at the Beskar7 Planning and Community Meeting. Add it to your calendar:
+
+<a target="_blank" href="https://calendar.google.com/calendar/event?action=TEMPLATE&amp;tmeid=NnNvZzBiMGhnaW9raGh0ZmFvdHAxNzdzZ2ZfMjAyNjEyMDNUMTUwMDAwWiB3aWxsaWFtLnJpenpvQG0&amp;tmsrc=william.rizzo%40gmail.com&amp;scp=ALL"><img border="0" src="https://calendar.google.com/calendar/images/ext/gc_button1_en.gif" alt="Google Calendar"></a>
+
 ## License
 
 Apache License 2.0 - See [LICENSE](LICENSE) file for details.
